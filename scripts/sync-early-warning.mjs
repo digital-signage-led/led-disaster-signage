@@ -6,12 +6,21 @@ import { loadEarlyWarning } from "../js/services/early-warning.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outPath = path.join(root, "data", "early-warning-snapshot.json");
+const slugs = process.argv.slice(2);
+const targets = slugs.length
+  ? PREFECTURES.filter((pref) => slugs.includes(pref.slug))
+  : PREFECTURES;
 const rows = [];
 
-for (const pref of PREFECTURES) {
+for (const pref of targets) {
   const data = await loadEarlyWarning(pref);
+  console.log(pref.slug, data.ok, data.rows?.length || 0);
   for (const row of data.rows || []) {
-    rows.push({ ...row, prefecture: pref.slug, reportAt: row.reportAt?.toISOString?.() || null });
+    rows.push({
+      ...row,
+      prefecture: pref.slug,
+      reportAt: row.reportAt instanceof Date ? row.reportAt.toISOString() : row.reportAt || null
+    });
   }
 }
 
