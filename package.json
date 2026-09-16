@@ -1,0 +1,13 @@
+{
+  "name": "led-disaster-signage",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "47都道府県対応の防災情報LEDサイネージ。気象警報・注意報 / 早期注意情報 / 台風情報 / 雷ナウキャスト / 竜巻発生確度ナウキャスト。",
+  "scripts": {
+    "start": "node scripts/preview-server.mjs",
+    "test": "node scripts/test-catalog.mjs",
+    "verify": "node scripts/verify-live.mjs",
+    "sync-early": "node scripts/sync-early-warning.mjs"
+  }
+}

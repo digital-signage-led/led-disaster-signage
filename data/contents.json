@@ -1,0 +1,39 @@
+{
+  "contents": [
+    {
+      "id": "weather_warning",
+      "name": "気象警報・注意報",
+      "location_scope": "prefecture",
+      "data_source": "jma_warning_r8",
+      "update_interval": 180000
+    },
+    {
+      "id": "early_warning",
+      "name": "早期注意情報（警報級の可能性）",
+      "location_scope": "prefecture",
+      "data_source": "jma_vpfd60",
+      "update_interval": 1200000
+    },
+    {
+      "id": "typhoon",
+      "name": "台風情報",
+      "location_scope": "national",
+      "data_source": "jma_typhoon",
+      "update_interval": 300000
+    },
+    {
+      "id": "lightning_nowcast",
+      "name": "雷ナウキャスト",
+      "location_scope": "prefecture",
+      "data_source": "jma_nowcast_thns",
+      "update_interval": 300000
+    },
+    {
+      "id": "tornado_nowcast",
+      "name": "竜巻発生確度ナウキャスト",
+      "location_scope": "prefecture",
+      "data_source": "jma_nowcast_trns",
+      "update_interval": 300000
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+node_modules/
+tmp-preview/
+tmp-*.png
+tmp-*.html
+_probe*.mjs
+.DS_Store
