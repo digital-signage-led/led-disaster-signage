@@ -1,34 +1,83 @@
 html, body {
   margin: 0;
-  min-height: 100%;
+  height: 100%;
   background: #0e1520;
   color: #e8eef7;
   font-family: "Noto Sans JP", "Yu Gothic UI", sans-serif;
 }
 
-body.admin { overflow: auto; }
+body.admin {
+  overflow: hidden;
+  height: 100vh;
+}
+
+[hidden] {
+  display: none !important;
+}
 
 .admin-app {
   display: grid;
-  grid-template-columns: 420px minmax(0, 1fr);
-  grid-template-rows: auto 1fr auto;
-  min-height: 100vh;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(220px, 1fr);
+  height: 100vh;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .admin-bar {
-  grid-column: 1 / -1;
   display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 20px;
+  gap: 10px 14px;
+  padding: 8px 14px;
   background: #111b2a;
   border-bottom: 1px solid #243247;
+  min-height: 56px;
+  position: relative;
+  z-index: 5;
 }
 
-.admin-bar h1 { font-size: 22px; margin: 0; }
-.admin-bar p { margin: 4px 0 0; color: #93a4bb; font-size: 13px; }
-.admin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.admin-bar h1 {
+  font-size: 18px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.admin-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+
+.bar-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  color: #c5d0df;
+  white-space: nowrap;
+}
+
+.bar-field select,
+.bar-field input[type="number"] {
+  width: 150px;
+  margin: 0;
+}
+
+.bar-field.grow {
+  min-width: 180px;
+  flex: 1 1 220px;
+}
+
+.bar-field.grow input[type="text"] {
+  width: 100%;
+  min-width: 160px;
+}
 
 button, select, input[type="text"], input[type="number"], input[type="range"] {
   font: inherit;
@@ -42,21 +91,51 @@ button {
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 button.ghost { background: #243247; }
 button.warn { background: #0f8a5a; }
 
 .admin-controls {
-  padding: 16px 18px 24px;
-  overflow: auto;
-  border-right: 1px solid #243247;
-  max-height: calc(100vh - 210px);
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #243247;
+  background: #0e1624;
+}
+
+.admin-controls label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  color: #c5d0df;
+  white-space: nowrap;
+}
+.admin-controls label[hidden] {
+  display: none !important;
+}
+
+.admin-controls input[type="range"] {
+  width: 88px;
+}
+
+.admin-controls input[type="number"] {
+  width: 76px;
+  margin: 0;
 }
 
 .admin-preview {
   position: relative;
   background: #000;
-  min-height: 480px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 #preview-host, .preview-scale {
@@ -66,40 +145,68 @@ button.warn { background: #0f8a5a; }
 }
 
 .admin-urls {
-  grid-column: 1 / -1;
-  padding: 16px 20px 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 112px);
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 6px;
+  padding: 6px 14px 8px;
   background: #111b2a;
-  border-top: 1px solid #243247;
+  border-bottom: 1px solid #243247;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
-
-fieldset {
-  border: 1px solid #2a3b53;
-  border-radius: 12px;
-  margin: 0 0 14px;
-  padding: 12px;
-}
-legend {
-  padding: 0 6px;
-  color: #8ec8ff;
-  font-weight: 800;
-}
-label {
-  display: block;
-  margin: 8px 0;
+.admin-urls h2 {
+  margin: 0;
   font-size: 13px;
+  white-space: nowrap;
+}
+.admin-urls .current-url { grid-column: 1 / -1; flex: 1 1 auto; }
+.admin-urls .filters { margin: 0; justify-self: end; }
+.admin-urls .url-wrap { grid-column: 1 / -1; }
+.current-url {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 320px;
+  font-size: 12px;
   color: #c5d0df;
 }
+.current-url code {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9ecbff;
+  background: #0d1624;
+  border: 1px solid #334861;
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+.url-wrap { overflow: auto; max-height: 112px; min-width: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+th, td { border-bottom: 1px solid #243247; padding: 5px 8px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+th:nth-child(1), td:nth-child(1) { width: 88px; }
+th:nth-child(2), td:nth-child(2) { width: 168px; }
+th:nth-child(3), td:nth-child(3) { width: 86px; }
+th:nth-child(5), td:nth-child(5) { width: 104px; }
+tr.is-current td { background: #163e8a; }
+.url-cell code { font-size: 12px; color: #9ecbff; }
+.url-wrap button { padding: 5px 8px; font-size: 12px; }
+
 select, input[type="text"], input[type="number"] {
-  width: 100%;
-  margin-top: 4px;
-  padding: 7px 8px;
+  padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid #334861;
   background: #0d1624;
   color: #fff;
 }
-input[type="range"] { width: 100%; }
-.check { display: flex; align-items: center; gap: 8px; }
+
+.check { display: flex; align-items: center; gap: 6px; }
 .check input { width: auto; }
 
 #combo-status, .pill {
@@ -109,20 +216,18 @@ input[type="range"] { width: 100%; }
   background: #334861;
   font-size: 12px;
   font-weight: 800;
+  white-space: nowrap;
 }
 #combo-status[data-status="published"], .pill[data-status="published"] { background: #0f8a5a; }
 #combo-status[data-status="draft"], .pill[data-status="draft"] { background: #b45309; }
 
 .filters {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
   gap: 10px;
-  margin: 12px 0;
+  margin: 6px 0;
 }
-.url-wrap { overflow: auto; max-height: 320px; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { border-bottom: 1px solid #243247; padding: 7px 8px; text-align: left; }
-.url-cell code { font-size: 12px; color: #9ecbff; }
 #toast {
   position: fixed;
   right: 20px;

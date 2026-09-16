@@ -8,7 +8,7 @@ import { getPrefecture, regionOf } from "./data/prefectures.js";
 import { createMap, MAP_ATTRIBUTION } from "./map/map-engine.js";
 import { formatStamp, nextForecastRefreshDelay } from "./services/jma-common.js";
 import { settingsForSignage } from "./store.js";
-import { applyDesignTokens, fitFixedScreen, FIXED_DESIGN } from "./viewport.js";
+import { applyDesignTokens, fitFixedScreen, measureVisibleBox, FIXED_DESIGN } from "./viewport.js";
 
 const RENDERERS = {
   weather_warning: renderWarnings,
@@ -17,8 +17,6 @@ const RENDERERS = {
   lightning_nowcast: renderThunderNowcast,
   tornado_nowcast: renderTornadoNowcast
 };
-
-const MAP_CONTENTS = new Set(["typhoon", "lightning_nowcast", "tornado_nowcast"]);
 
 function screenHtml() {
   return `
@@ -70,6 +68,23 @@ function applyVisibility(els, common) {
   els.screen.classList.toggle("is-legend-off", common.showLegend === false);
 }
 
+function bindFit(els, options, cleanups) {
+  const fitTo = () => {
+    if (options.fit === false) return;
+    const host = options.fitHost || els.root;
+    const bounds = host && host !== document.body ? measureVisibleBox(host) : null;
+    fitFixedScreen(els.screen, FIXED_DESIGN.width, FIXED_DESIGN.height, bounds);
+    els.screen.style.maxWidth = "none";
+  };
+  fitTo();
+  if (options.fitHost) {
+    const ro = new ResizeObserver(fitTo);
+    ro.observe(options.fitHost);
+    cleanups.push(() => ro.disconnect());
+  }
+  return fitTo;
+}
+
 export async function mountSignage(root, options = {}) {
   const prefecture = getPrefecture(options.prefecture);
   const content = getContent(options.content);
@@ -91,20 +106,22 @@ export async function mountSignage(root, options = {}) {
 
   els.screen.dataset.prefecture = prefecture.slug;
   els.screen.dataset.content = content.id;
-  els.screen.classList.toggle("is-map", MAP_CONTENTS.has(content.id));
+  els.screen.classList.add("is-map");
   const customTitle = published.title || "";
   els.title.textContent = customTitle || `${prefecture.name}｜${content.name}`;
   els.stamp.textContent = "データ取得中";
   els.point.textContent = regionOf(prefecture.slug).name;
   els.attr.textContent = MAP_ATTRIBUTION;
-  els.stage.hidden = false;
-  els.stage.innerHTML = "";
+  if (els.stage) {
+    els.stage.hidden = true;
+    els.stage.innerHTML = "";
+  }
   applyDesignTokens(els.screen, { common });
   applyVisibility(els, common);
-  if (options.fit !== false) fitFixedScreen(els.screen, FIXED_DESIGN.width, FIXED_DESIGN.height);
+  const fitTo = bindFit(els, options, cleanups);
 
   if (published.enabled === false) {
-    els.stage.innerHTML = `<div class="data-empty">このコンテンツは管理画面で非表示に設定されています</div>`;
+    els.panel.innerHTML = `<div class="data-empty">このコンテンツは管理画面で非表示に設定されています</div>`;
     els.stamp.textContent = "非表示";
     return {
       prefecture, content, map: null, els, data: { ok: true, hidden: true },
@@ -113,29 +130,30 @@ export async function mountSignage(root, options = {}) {
   }
 
   let map = options.map || null;
-  if (MAP_CONTENTS.has(content.id)) {
-    try {
-      if (!map) {
-        map = await createMap(els.mapCanvas, {
-          prefecture,
-          interactive: !!options.interactive,
-          zoom: content.id === "typhoon" ? 4.4 : prefecture.defaultZoom,
-          center: content.id === "typhoon" ? [30, 137] : null
-        });
-      } else if (content.id !== "typhoon") {
-        map.setView([prefecture.centerLatitude, prefecture.centerLongitude], prefecture.defaultZoom);
-      }
-    } catch (error) {
-      els.stage.hidden = false;
-      els.stage.innerHTML = `<div class="data-error">地図を初期化できませんでした</div>`;
-      els.stamp.textContent = "地図初期化失敗";
-      return {
-        prefecture, content, map: null, els, data: { ok: false, error: String(error.message || error) },
-        destroy() { cleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } }); }
-      };
+  try {
+    if (!map) {
+      map = await createMap(els.mapCanvas, {
+        prefecture,
+        interactive: !!options.interactive,
+        mode: content.id === "typhoon" ? "national" : "prefecture",
+        zoom: content.id === "typhoon" ? 4 : undefined,
+        center: content.id === "typhoon" ? [32, 132] : null,
+        maxFitZoom: content.id === "lightning_nowcast" || content.id === "tornado_nowcast" ? 7 : undefined
+      });
+    } else if (content.id === "typhoon") {
+      map.setView([32, 132], 4);
+    } else {
+      map.setView(prefecture);
     }
-  } else if (els.mapCanvas) {
-    els.mapCanvas.innerHTML = "";
+    fitTo();
+    map.invalidate();
+  } catch (error) {
+    els.panel.innerHTML = `<div class="data-error">地図を初期化できませんでした</div>`;
+    els.stamp.textContent = "地図初期化失敗";
+    return {
+      prefecture, content, map: null, els, data: { ok: false, error: String(error.message || error) },
+      destroy() { cleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } }); }
+    };
   }
 
   const ctx = {
@@ -160,6 +178,8 @@ export async function mountSignage(root, options = {}) {
       els.stamp.textContent = "気象データを取得できませんでした";
     }
     els.screen.dataset.ready = "1";
+    fitTo();
+    map.invalidate();
     return {
       prefecture,
       content,
@@ -173,8 +193,7 @@ export async function mountSignage(root, options = {}) {
       }
     };
   } catch (error) {
-    els.stage.hidden = false;
-    els.stage.innerHTML = `<div class="data-error">表示処理でエラーが発生しました</div>`;
+    els.panel.innerHTML = `<div class="data-error">表示処理でエラーが発生しました</div>`;
     els.stamp.textContent = "表示エラー";
     return {
       prefecture, content, map, els, data: { ok: false, error: String(error.message || error) },

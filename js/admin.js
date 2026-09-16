@@ -1,5 +1,5 @@
-import { CONTENTS } from "./data/contents.js";
-import { PREFECTURES } from "./data/prefectures.js";
+import { CONTENTS, getContent } from "./data/contents.js";
+import { PREFECTURES, getPrefecture } from "./data/prefectures.js";
 import { mountSignage } from "./signage-view.js";
 import { applyDesignTokens } from "./viewport.js";
 import {
@@ -15,12 +15,20 @@ import {
 
 const $ = (id) => document.getElementById(id);
 
+const query = new URLSearchParams(location.search);
 const state = {
   store: loadDraft(),
-  prefecture: "tokyo",
-  content: "weather_warning",
-  preview: null
+  prefecture: getPrefecture(query.get("prefecture") || "toyama").slug,
+  content: getContent(query.get("content") || "weather_warning").id,
+  preview: null,
+  previewSeq: 0
 };
+
+function clampPlayMs(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 2000;
+  return Math.min(4000, Math.max(1200, n));
+}
 
 function fillSelect(el, items, getValue, getLabel, selected) {
   el.innerHTML = items.map((item) => {
@@ -73,8 +81,8 @@ function syncContentInputs() {
   $("custom-title").value = state.store.titles[state.content] || "";
   $("content-enabled").checked = state.store.enabled[state.content] !== false;
   $("content-order").value = state.store.order.indexOf(state.content) + 1;
-  $("thunder-play").value = state.store.contents.lightning_nowcast.playMs;
-  $("tornado-play").value = state.store.contents.tornado_nowcast.playMs;
+  $("thunder-play").value = clampPlayMs(state.store.contents.lightning_nowcast.playMs);
+  $("tornado-play").value = clampPlayMs(state.store.contents.tornado_nowcast.playMs);
   document.querySelectorAll("[data-for-content]").forEach((el) => {
     el.hidden = el.dataset.forContent !== state.content;
   });
@@ -87,8 +95,12 @@ function readContentInputs() {
   const order = state.store.order.filter((id) => id !== state.content);
   order.splice(nextIndex, 0, state.content);
   state.store.order = order;
-  state.store.contents.lightning_nowcast.playMs = Number($("thunder-play").value);
-  state.store.contents.tornado_nowcast.playMs = Number($("tornado-play").value);
+  if (state.content === "lightning_nowcast") {
+    state.store.contents.lightning_nowcast.playMs = clampPlayMs($("thunder-play").value);
+  }
+  if (state.content === "tornado_nowcast") {
+    state.store.contents.tornado_nowcast.playMs = clampPlayMs($("tornado-play").value);
+  }
 }
 
 function statusLabel() {
@@ -97,29 +109,65 @@ function statusLabel() {
   $("combo-status").dataset.status = status;
 }
 
-async function renderPreview() {
+let previewQueue = Promise.resolve();
+
+function renderPreview() {
+  const seq = ++state.previewSeq;
+  previewQueue = previewQueue.catch(() => {}).then(() => runPreview(seq));
+  return previewQueue;
+}
+
+async function runPreview(seq) {
+  if (seq !== state.previewSeq) return;
   const host = $("preview-host");
   if (state.preview) {
-    state.preview.destroy();
+    try { state.preview.destroy(); } catch { /* ignore */ }
     if (state.preview.map) {
       try { state.preview.map.destroy(); } catch { /* ignore */ }
     }
+    state.preview = null;
   }
   host.innerHTML = "";
   const wrap = document.createElement("div");
   wrap.className = "preview-scale";
   host.appendChild(wrap);
-  state.preview = await mountSignage(wrap, {
-    prefecture: state.prefecture,
-    content: state.content,
-    settings: {
-      common: state.store.common,
-      content: state.store.contents[state.content],
-      title: state.store.titles[state.content],
-      enabled: state.store.enabled[state.content]
-    },
-    fit: true
-  });
+  try {
+    const preview = await mountSignage(wrap, {
+      prefecture: state.prefecture,
+      content: state.content,
+      settings: {
+        common: state.store.common,
+        content: state.store.contents[state.content],
+        title: state.store.titles[state.content],
+        enabled: state.store.enabled[state.content]
+      },
+      fit: true,
+      fitHost: host
+    });
+    if (seq !== state.previewSeq) {
+      try { preview.destroy(); } catch { /* ignore */ }
+      if (preview.map) {
+        try { preview.map.destroy(); } catch { /* ignore */ }
+      }
+      return;
+    }
+    state.preview = preview;
+    syncCurrentUrl();
+  } catch (error) {
+    if (seq !== state.previewSeq) return;
+    wrap.innerHTML = `<div class="data-error">プレビューを表示できませんでした</div>`;
+    toast(String(error.message || error));
+  }
+}
+
+function syncCurrentUrl() {
+  const url = publicHref(state.prefecture, state.content);
+  const el = $("current-url");
+  if (el) el.textContent = url;
+  const next = new URL(location.href);
+  next.searchParams.set("prefecture", state.prefecture);
+  next.searchParams.set("content", state.content);
+  history.replaceState(null, "", `${next.pathname}${next.search}`);
 }
 
 function publicHref(pref, content) {
@@ -139,7 +187,8 @@ function renderUrls() {
   $("url-count").textContent = `${rows.length} / 235`;
   $("url-table").innerHTML = rows.map((row) => {
     const url = publicHref(row.prefecture.slug, row.content.id);
-    return `<tr>
+    const current = row.prefecture.slug === state.prefecture && row.content.id === state.content ? " is-current" : "";
+    return `<tr class="${current}" data-open-pref="${row.prefecture.slug}" data-open-content="${row.content.id}">
       <td>${row.prefecture.name}</td>
       <td>${row.content.name}</td>
       <td><span class="pill" data-status="${row.status}">${row.status === "published" ? "公開済み" : "下書き"}</span></td>
@@ -168,12 +217,14 @@ function bind() {
   $("pref-select").addEventListener("change", () => {
     state.prefecture = $("pref-select").value;
     statusLabel();
+    renderUrls();
     renderPreview();
   });
   $("content-select").addEventListener("change", () => {
     state.content = $("content-select").value;
     syncContentInputs();
     statusLabel();
+    renderUrls();
     renderPreview();
   });
 
@@ -193,11 +244,13 @@ function bind() {
         state.preview.els.screen.classList.toggle("is-legend-off", common.showLegend === false);
       }
     });
-    if ((el.tagName === "INPUT" && (el.type === "number" || el.type === "text" || el.type === "checkbox"))) {
+    if (el.tagName === "INPUT" && (el.type === "number" || el.type === "checkbox")) {
       el.addEventListener("change", () => {
         readCommonInputs();
         readContentInputs();
-        renderPreview();
+        if (el.id === "content-enabled" || el.id === "thunder-play" || el.id === "tornado-play") {
+          renderPreview();
+        }
       });
     }
   });
@@ -235,18 +288,65 @@ function bind() {
   $("url-pref").addEventListener("input", renderUrls);
   $("url-content").addEventListener("change", renderUrls);
   $("url-status").addEventListener("change", renderUrls);
-  $("url-table").addEventListener("click", async (event) => {
-    const btn = event.target.closest("[data-copy]");
-    if (!btn) return;
+  $("btn-copy-all-urls").addEventListener("click", async () => {
+    const qPref = $("url-pref").value.trim();
+    const qContent = $("url-content").value;
+    const qStatus = $("url-status").value;
+    const lines = ["地域\tコンテンツ\t公開URL"];
+    for (const row of allCombos()) {
+      if (qPref && !(`${row.prefecture.name}${row.prefecture.slug}`.includes(qPref))) continue;
+      if (qContent && row.content.id !== qContent) continue;
+      if (qStatus && row.status !== qStatus) continue;
+      lines.push(`${row.prefecture.name}\t${row.content.name}\t${publicHref(row.prefecture.slug, row.content.id)}`);
+    }
+    const text = lines.join("\n");
     try {
-      await navigator.clipboard.writeText(btn.dataset.copy);
+      await navigator.clipboard.writeText(text);
+      toast(`${lines.length - 1}件をコピーしました`);
+    } catch {
+      const box = document.createElement("textarea");
+      box.value = text;
+      document.body.appendChild(box);
+      box.select();
+      document.execCommand("copy");
+      box.remove();
+      toast(`${lines.length - 1}件をコピーしました`);
+    }
+  });
+  $("btn-copy-current").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(publicHref(state.prefecture, state.content));
       toast("URLをコピーしました");
     } catch {
       toast("コピーできませんでした");
     }
   });
+  $("url-table").addEventListener("click", async (event) => {
+    const copyBtn = event.target.closest("[data-copy]");
+    if (copyBtn) {
+      event.preventDefault();
+      try {
+        await navigator.clipboard.writeText(copyBtn.dataset.copy);
+        toast("URLをコピーしました");
+      } catch {
+        toast("コピーできませんでした");
+      }
+      return;
+    }
+    const row = event.target.closest("[data-open-pref]");
+    if (!row) return;
+    $("pref-select").value = row.dataset.openPref;
+    $("content-select").value = row.dataset.openContent;
+    state.prefecture = row.dataset.openPref;
+    state.content = row.dataset.openContent;
+    syncContentInputs();
+    statusLabel();
+    renderUrls();
+    renderPreview();
+  });
 }
 
 bind();
-renderPreview();
+syncCurrentUrl();
 renderUrls();
+renderPreview();

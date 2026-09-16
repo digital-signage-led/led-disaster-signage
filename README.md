@@ -46,6 +46,21 @@ index.html?prefecture=osaka&content=tornado_nowcast
 - 地図：国土地理院 淡色地図タイル
 - 地域マスター：雨・レーダーサイネージと同じ47都道府県定義
 
+## 本番
+
+リポジトリ: https://github.com/digital-signage-led/led-disaster-signage
+
+GitHub Pages（天気予報・雨レーダーと同じ main / 公開）:
+
+- 管理画面 https://digital-signage-led.github.io/led-disaster-signage/admin.html
+- 気象警報・注意報 https://digital-signage-led.github.io/led-disaster-signage/?prefecture=tokyo&content=weather_warning
+- 早期注意情報 https://digital-signage-led.github.io/led-disaster-signage/?prefecture=tokyo&content=early_warning
+- 台風情報 https://digital-signage-led.github.io/led-disaster-signage/?prefecture=tokyo&content=typhoon
+- 雷ナウキャスト https://digital-signage-led.github.io/led-disaster-signage/?prefecture=osaka&content=lightning_nowcast
+- 竜巻発生確度ナウキャスト https://digital-signage-led.github.io/led-disaster-signage/?prefecture=osaka&content=tornado_nowcast
+
+Pages 設定: Settings → Pages → Deploy from a branch → `main` / `/`
+
 ## ローカル
 
 ```

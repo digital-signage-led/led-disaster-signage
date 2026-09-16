@@ -7,9 +7,22 @@ export function readWindowSize() {
   return { width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) };
 }
 
-export function fitFixedScreen(element, designW = FIXED_DESIGN.width, designH = FIXED_DESIGN.height) {
+export function measureVisibleBox(el) {
+  if (!el || el === document.body) return readWindowSize();
+  const r = el.getBoundingClientRect();
+  const vw = window.innerWidth || document.documentElement.clientWidth || 1;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 1;
+  const width = Math.min(r.width, Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0)));
+  const height = Math.min(r.height, Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0)));
+  return {
+    width: Math.max(1, Math.round(width || r.width || el.clientWidth || 1)),
+    height: Math.max(1, Math.round(height || r.height || el.clientHeight || 1))
+  };
+}
+
+export function fitFixedScreen(element, designW = FIXED_DESIGN.width, designH = FIXED_DESIGN.height, bounds = null) {
   if (!element) return 1;
-  const win = readWindowSize();
+  const win = bounds || readWindowSize();
   const scale = Math.min(win.width / designW, win.height / designH);
   const ox = (win.width - designW * scale) / 2;
   const oy = (win.height - designH * scale) / 2;

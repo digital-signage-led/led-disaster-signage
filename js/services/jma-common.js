@@ -60,7 +60,8 @@ export async function fetchText(url, timeoutMs = 12000) {
 }
 
 export async function fetchJson(url, timeoutMs = 12000) {
-  const text = await fetchText(url, timeoutMs);
+  const remote = /^https?:\/\//i.test(url);
+  const text = remote ? await fetchTextFlexible(url, timeoutMs) : await fetchText(url, timeoutMs);
   try {
     return JSON.parse(text);
   } catch {
@@ -73,14 +74,22 @@ export async function fetchViaProxy(url, timeoutMs = 14000) {
   return fetchText(proxied, timeoutMs);
 }
 
+function canUseLocalProxy() {
+  return typeof location !== "undefined" && location.protocol === "http:" &&
+    (location.hostname === "127.0.0.1" || location.hostname === "localhost");
+}
+
 export async function fetchTextFlexible(url, timeoutMs = 14000) {
+  const preferProxy = canUseLocalProxy();
+  const first = preferProxy ? () => fetchViaProxy(url, timeoutMs) : () => fetchText(url, timeoutMs);
+  const second = preferProxy ? () => fetchText(url, timeoutMs) : () => fetchViaProxy(url, timeoutMs);
   try {
-    return await fetchText(url, timeoutMs);
-  } catch (directError) {
+    return await first();
+  } catch (firstError) {
     try {
-      return await fetchViaProxy(url, timeoutMs);
+      return await second();
     } catch {
-      throw directError;
+      throw firstError;
     }
   }
 }

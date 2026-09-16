@@ -30,16 +30,17 @@ export function legendHtml(steps) {
   )).join("");
 }
 
-export function playController({ frames, playMs, onFrame, holdMs = 2400 }) {
-  let index = 0;
+export function playController({ frames, playMs, onFrame, holdMs = 2400, startIndex = 0 }) {
+  let index = Math.max(0, Math.min(frames.length - 1, Number(startIndex) || 0));
   let timer = 0;
   let stopped = false;
 
   const step = () => {
     if (stopped || !frames.length) return;
     onFrame(frames[index], index, frames.length);
+    const isNow = frames[index]?.validtime && frames[index].validtime === frames[index].basetime;
     const isLast = index === frames.length - 1;
-    const delay = isLast ? holdMs : (playMs || 1800);
+    const delay = isLast || isNow ? holdMs : (playMs || 1800);
     index = (index + 1) % frames.length;
     timer = window.setTimeout(step, Math.max(1200, delay));
   };

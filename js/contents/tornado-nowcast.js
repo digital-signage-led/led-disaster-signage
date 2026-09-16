@@ -16,9 +16,12 @@ export async function renderTornadoNowcast(ctx) {
     return data;
   }
   const playMs = Number(ctx.contentSettings.playMs || 2000);
+  const nowIndex = data.frames.findIndex((frame) => frame.validtime === frame.basetime);
   const player = playController({
     frames: data.frames,
     playMs,
+    holdMs: 3200,
+    startIndex: nowIndex >= 0 ? nowIndex : 0,
     onFrame(frame, index, total) {
       ctx.map.setTileOverlay(frame.tileUrl);
       ctx.els.point.textContent = `${formatStamp(frame.date)}　${index + 1}/${total}`;
@@ -31,7 +34,7 @@ export async function renderTornadoNowcast(ctx) {
   ctx.els.panel.innerHTML = `
     <div class="panel-kicker">竜巻発生確度</div>
     <div class="panel-area">${ctx.prefecture.name}</div>
-    <p class="wx-hint">気象庁の竜巻発生確度ナウキャストです。確度の意味は公式解説のままです。</p>
+    <p class="wx-hint">気象庁の竜巻発生確度ナウキャストです。この地域に該当がなければ地図は無色のままです。</p>
     <div class="legend">${legendHtml(TORNADO_LEGEND)}</div>
     <p class="wx-hint">${TORNADO_LEGEND.map((step) => `${step.label}：${step.meaning}`).join("　")}</p>
     ${timesBlock({ reportAt: data.dataUpdatedAt, fetchedAt: data.fetchedAt, fromCache: data.fromCache, reportLabel: "データ時刻" })}

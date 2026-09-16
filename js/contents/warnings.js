@@ -1,6 +1,28 @@
 import { loadWarnings } from "../services/warnings.js";
 import { emptyPanel, errorPanel, timesBlock } from "./shared-ui.js";
 
+const MAP_FILL = {
+  special: { fillColor: "#111111", fillOpacity: 0.92 },
+  warning: { fillColor: "#c62828", fillOpacity: 0.88 },
+  advisory: { fillColor: "#f2e700", fillOpacity: 0.94 }
+};
+
+function topWarningClass(items) {
+  const rank = { special: 0, warning: 1, advisory: 2 };
+  return (items || []).slice().sort((a, b) => (rank[a.className] ?? 9) - (rank[b.className] ?? 9))[0] || null;
+}
+
+function paintWarningMap(ctx, items) {
+  if (!ctx.map?.setPrefColors) return;
+  const top = topWarningClass(items);
+  if (top && MAP_FILL[top.className] && ctx.prefecture?.id) {
+    ctx.map.setPrefColors({ [ctx.prefecture.id]: MAP_FILL[top.className] });
+  } else {
+    ctx.map.clearPrefColors?.();
+  }
+  ctx.addCleanup(() => ctx.map.clearPrefColors?.());
+}
+
 function groupItems(items) {
   return {
     special: items.filter((item) => item.className === "special"),
@@ -36,6 +58,8 @@ function section(title, items, className) {
 export async function renderWarnings(ctx) {
   const data = await loadWarnings(ctx.prefecture);
   const groups = groupItems(data.items || []);
+  paintWarningMap(ctx, data.items || []);
+  if (ctx.els.stage) ctx.els.stage.hidden = true;
   if (!data.ok && !data.items?.length) {
     ctx.els.panel.innerHTML = `
       <div class="panel-kicker">気象警報・注意報</div>
@@ -45,17 +69,15 @@ export async function renderWarnings(ctx) {
     `;
     return data;
   }
-  if (data.empty) {
-    ctx.els.stage.innerHTML = emptyPanel(`現在、この地域に発表中の気象警報・注意報はありません`);
-  } else {
-    ctx.els.stage.innerHTML = `
+  const board = data.empty
+    ? emptyPanel(`現在、この地域に発表中の気象警報・注意報はありません`)
+    : `
       <div class="warn-board">
         ${section("特別警報", groups.special, "special")}
         ${section("警報", groups.warning, "warning")}
         ${section("注意報", groups.advisory, "advisory")}
       </div>
     `;
-  }
   ctx.els.panel.innerHTML = `
     <div class="panel-kicker">気象警報・注意報</div>
     <div class="panel-area">${ctx.prefecture.name}</div>
@@ -65,6 +87,7 @@ export async function renderWarnings(ctx) {
       <div><em>警報</em><strong>${groups.warning.length}</strong></div>
       <div><em>注意報</em><strong>${groups.advisory.length}</strong></div>
     </div>
+    ${board}
     ${timesBlock({ reportAt: data.reportAt, fetchedAt: data.fetchedAt, fromCache: data.fromCache, reportLabel: "発表時刻" })}
   `;
   return data;

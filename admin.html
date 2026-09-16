@@ -13,12 +13,22 @@
 <body class="admin">
   <div class="admin-app">
     <header class="admin-bar">
-      <div>
-        <h1>防災情報 管理</h1>
-        <p>コンテンツと地域を選び、プレビュー確認後に同じ公開URLへ反映します。</p>
-      </div>
+      <h1>防災情報 管理</h1>
+      <label class="bar-field">コンテンツ
+        <select id="content-select"></select>
+      </label>
+      <label class="bar-field">地域
+        <select id="pref-select"></select>
+      </label>
+      <label class="bar-field">表示順
+        <input id="content-order" data-live type="number" min="1" max="5" step="1">
+      </label>
+      <label class="bar-field grow">タイトル
+        <input id="custom-title" data-live type="text" placeholder="空欄なら地域｜コンテンツ名">
+      </label>
+      <label class="check"><input id="content-enabled" data-live type="checkbox"> 表示する</label>
+      <span id="combo-status">公開済み</span>
       <div class="admin-actions">
-        <span id="combo-status">公開済み</span>
         <button type="button" id="btn-save" class="ghost">下書き保存</button>
         <button type="button" id="btn-publish" class="warn">この組み合わせを公開</button>
         <button type="button" id="btn-publish-all">235件を公開</button>
@@ -27,59 +37,33 @@
     </header>
 
     <section class="admin-controls">
-      <fieldset>
-        <legend>選択</legend>
-        <label>コンテンツ
-          <select id="content-select"></select>
-        </label>
-        <label>地域
-          <select id="pref-select"></select>
-        </label>
-        <label>表示順
-          <input id="content-order" data-live type="number" min="1" max="5" step="1">
-        </label>
-        <label>タイトル
-          <input id="custom-title" data-live type="text" placeholder="空欄なら地域｜コンテンツ名">
-        </label>
-        <label class="check"><input id="content-enabled" data-live type="checkbox"> このコンテンツを表示する</label>
-      </fieldset>
-
-      <fieldset>
-        <legend>共通表示設定</legend>
-        <label>タイトルサイズ <input id="title-size" data-live type="range" min="0.7" max="1.6" step="0.02"></label>
-        <label>タイトル左右 <input id="title-x" data-live type="range" min="-80" max="80" step="1"></label>
-        <label>タイトル上下 <input id="title-y" data-live type="range" min="-40" max="40" step="1"></label>
-        <label>地図サイズ <input id="map-scale" data-live type="range" min="0.7" max="1.4" step="0.02"></label>
-        <label>地図左右 <input id="map-x" data-live type="range" min="-80" max="80" step="1"></label>
-        <label>地図上下 <input id="map-y" data-live type="range" min="-60" max="60" step="1"></label>
-        <label>文字サイズ <input id="font-size" data-live type="range" min="0.8" max="1.4" step="0.02"></label>
-        <label>情報パネル左右 <input id="panel-x" data-live type="range" min="-60" max="60" step="1"></label>
-        <label>情報パネル上下 <input id="panel-y" data-live type="range" min="-40" max="40" step="1"></label>
-        <label>余白 <input id="padding" data-live type="range" min="0.7" max="1.3" step="0.02"></label>
-        <label class="check"><input id="show-title" data-live type="checkbox"> タイトルを表示</label>
-        <label class="check"><input id="show-stamp" data-live type="checkbox"> 更新時刻を表示</label>
-        <label class="check"><input id="show-point" data-live type="checkbox"> 地域名を表示</label>
-        <label class="check"><input id="show-legend" data-live type="checkbox"> 凡例を表示</label>
-        <label class="check"><input id="show-panel" data-live type="checkbox"> 情報パネルを表示</label>
-        <label class="check"><input id="show-attr" data-live type="checkbox"> 出典を表示</label>
-      </fieldset>
-
-      <fieldset data-for-content="lightning_nowcast">
-        <legend>雷ナウキャストだけの設定</legend>
-        <label>コマ送り(ms) <input id="thunder-play" data-live type="number" min="1200" max="4000" step="100"></label>
-      </fieldset>
-      <fieldset data-for-content="tornado_nowcast">
-        <legend>竜巻発生確度ナウキャストだけの設定</legend>
-        <label>コマ送り(ms) <input id="tornado-play" data-live type="number" min="1200" max="4000" step="100"></label>
-      </fieldset>
-    </section>
-
-    <section class="admin-preview" aria-label="プレビュー">
-      <div id="preview-host"></div>
+      <label>タイトル大きさ <input id="title-size" data-live type="range" min="0.7" max="1.6" step="0.02"></label>
+      <label>タイトル左右 <input id="title-x" data-live type="range" min="-80" max="80" step="1"></label>
+      <label>タイトル上下 <input id="title-y" data-live type="range" min="-40" max="40" step="1"></label>
+      <label>地図サイズ <input id="map-scale" data-live type="range" min="0.7" max="1.4" step="0.02"></label>
+      <label>地図左右 <input id="map-x" data-live type="range" min="-80" max="80" step="1"></label>
+      <label>地図上下 <input id="map-y" data-live type="range" min="-60" max="60" step="1"></label>
+      <label>文字サイズ <input id="font-size" data-live type="range" min="0.8" max="1.4" step="0.02"></label>
+      <label>パネル左右 <input id="panel-x" data-live type="range" min="-60" max="60" step="1"></label>
+      <label>パネル上下 <input id="panel-y" data-live type="range" min="-40" max="40" step="1"></label>
+      <label>余白 <input id="padding" data-live type="range" min="0.7" max="1.3" step="0.02"></label>
+      <label class="check"><input id="show-title" data-live type="checkbox"> タイトル</label>
+      <label class="check"><input id="show-stamp" data-live type="checkbox"> 更新時刻</label>
+      <label class="check"><input id="show-point" data-live type="checkbox"> 地域名</label>
+      <label class="check"><input id="show-legend" data-live type="checkbox"> 凡例</label>
+      <label class="check"><input id="show-panel" data-live type="checkbox"> 情報パネル</label>
+      <label class="check"><input id="show-attr" data-live type="checkbox"> 出典</label>
+      <label data-for-content="lightning_nowcast">雷コマ送りms <input id="thunder-play" data-live type="number" min="1200" max="4000" step="100"></label>
+      <label data-for-content="tornado_nowcast">竜巻コマ送りms <input id="tornado-play" data-live type="number" min="1200" max="4000" step="100"></label>
     </section>
 
     <section class="admin-urls">
-      <h2>公開URL一覧（47都道府県 × 5コンテンツ = 235）</h2>
+      <div class="current-url">
+        <span>この画面のURL</span>
+        <code id="current-url"></code>
+        <button type="button" id="btn-copy-current" class="ghost">コピー</button>
+      </div>
+      <h2>公開URL一覧（47都道府県 × 5コンテンツ = 235） <a href="urls.html" style="color:#9ecbff;font-weight:700;">全件をまとめて見る</a></h2>
       <div class="filters">
         <input id="url-pref" type="text" placeholder="都道府県検索">
         <select id="url-content"></select>
@@ -89,6 +73,7 @@
           <option value="draft">下書き</option>
         </select>
         <strong id="url-count">235 / 235</strong>
+        <button type="button" id="btn-copy-all-urls" class="ghost">一括コピー</button>
       </div>
       <div class="url-wrap">
         <table>
@@ -98,6 +83,10 @@
           <tbody id="url-table"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="admin-preview" aria-label="プレビュー">
+      <div id="preview-host"></div>
     </section>
   </div>
   <div id="toast" hidden></div>

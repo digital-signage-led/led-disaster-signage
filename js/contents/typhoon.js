@@ -53,10 +53,11 @@ function drawStorms(mapApi, storms) {
       }));
     }
   }
+  bounds.push([24.0, 122.5], [46.5, 146.5]);
   if (bounds.length) {
-    mapApi.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6, animate: false });
+    mapApi.map.fitBounds(bounds, { padding: [28, 28], maxZoom: 5, animate: false });
   } else {
-    mapApi.setView([30, 137], 4);
+    mapApi.setView([32, 135], 5);
   }
 }
 
@@ -95,13 +96,12 @@ export async function renderTyphoon(ctx) {
       ${errorPanel(data.message)}
       ${timesBlock({ reportAt: null, fetchedAt: data.fetchedAt, fromCache: false, reportLabel: "発表時刻" })}
     `;
-    ctx.map.setView([30, 137], 4);
+    ctx.map.setView([32, 135], 5);
     return data;
   }
   if (data.empty) {
-    ctx.els.stage.hidden = true;
-    ctx.els.mapCanvas.parentElement.classList.add("is-wide");
-    ctx.map.setView([30, 137], 4);
+    if (ctx.els.stage) ctx.els.stage.hidden = true;
+    ctx.map.setView([32, 135], 5);
     ctx.els.panel.innerHTML = `
       <div class="panel-kicker">台風情報</div>
       <div class="panel-area">全国</div>
@@ -110,7 +110,7 @@ export async function renderTyphoon(ctx) {
     `;
     return data;
   }
-  ctx.els.stage.hidden = true;
+  if (ctx.els.stage) ctx.els.stage.hidden = true;
   drawStorms(ctx.map, data.storms);
   let index = 0;
   const paint = () => {
