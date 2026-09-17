@@ -1,10 +1,25 @@
 import { getContent } from "./data/contents.js";
 import { getPrefecture } from "./data/prefectures.js";
 import { bindAutoFit, mountSignage, refreshDelayFor } from "./signage-view.js";
+import { PREVIEW_SETTINGS_KEY } from "./store.js";
+import { applyDesignTokens } from "./viewport.js";
+
+function readPreviewSettings() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("preview") !== "1") return undefined;
+  try {
+    const raw = sessionStorage.getItem(PREVIEW_SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 const params = new URLSearchParams(location.search);
-const prefecture = getPrefecture(params.get("prefecture") || params.get("pref") || params.get("region") || "tokyo");
 const content = getContent(params.get("content") || "weather_warning");
+const prefecture = content.locationScope === "national"
+  ? getPrefecture("national")
+  : getPrefecture(params.get("prefecture") || params.get("pref") || params.get("region") || "tokyo");
 
 document.title = `${prefecture.name}｜${content.name}`;
 document.documentElement.classList.remove("is-boot");
@@ -28,7 +43,8 @@ async function render() {
     root.innerHTML = "";
     session = await mountSignage(root, {
       prefecture: prefecture.slug,
-      content: content.id
+      content: content.id,
+      settings: readPreviewSettings()
     });
     if (fitOff) fitOff();
     fitOff = bindAutoFit(session.els.screen);
@@ -55,6 +71,20 @@ schedule();
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) render();
+});
+
+window.addEventListener("message", (event) => {
+  if (event.origin !== location.origin) return;
+  if (event.data?.type !== "disaster-preview-tokens" || !session?.els) return;
+  const common = event.data.common || {};
+  applyDesignTokens(session.els.screen, { common });
+  session.els.stamp.hidden = common.showStamp === false;
+  session.els.point.hidden = common.showPoint === false;
+  session.els.panel.hidden = common.showPanel === false;
+  session.els.attr.hidden = common.showAttribution === false;
+  session.els.title.hidden = common.showTitle === false;
+  session.els.screen.classList.toggle("is-panel-off", common.showPanel === false);
+  session.els.screen.classList.toggle("is-legend-off", common.showLegend === false);
 });
 
 window.addEventListener("beforeunload", () => {

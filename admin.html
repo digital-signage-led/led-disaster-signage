@@ -31,7 +31,7 @@
       <div class="admin-actions">
         <button type="button" id="btn-save" class="ghost">下書き保存</button>
         <button type="button" id="btn-publish" class="warn">この組み合わせを公開</button>
-        <button type="button" id="btn-publish-all">235件を公開</button>
+        <button type="button" id="btn-publish-all">全件を公開</button>
         <button type="button" id="btn-open" class="ghost">本番URLを開く</button>
       </div>
     </header>
@@ -63,7 +63,7 @@
         <code id="current-url"></code>
         <button type="button" id="btn-copy-current" class="ghost">コピー</button>
       </div>
-      <h2>公開URL一覧（47都道府県 × 5コンテンツ = 235） <a href="urls.html" style="color:#9ecbff;font-weight:700;">全件をまとめて見る</a></h2>
+      <h2>公開URL一覧（都道府県4種 + 台風は全国1件 = 189） <a href="urls.html" style="color:#9ecbff;font-weight:700;">全件をまとめて見る</a></h2>
       <div class="filters">
         <input id="url-pref" type="text" placeholder="都道府県検索">
         <select id="url-content"></select>
@@ -72,7 +72,7 @@
           <option value="published">公開済み</option>
           <option value="draft">下書き</option>
         </select>
-        <strong id="url-count">235 / 235</strong>
+        <strong id="url-count">189 / 189</strong>
         <button type="button" id="btn-copy-all-urls" class="ghost">一括コピー</button>
       </div>
       <div class="url-wrap">
@@ -90,6 +90,6 @@
     </section>
   </div>
   <div id="toast" hidden></div>
-  <script type="module" src="js/admin.js"></script>
+  <script type="module" src="js/admin.js?v=20260917e"></script>
 </body>
 </html>

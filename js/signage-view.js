@@ -86,8 +86,10 @@ function bindFit(els, options, cleanups) {
 }
 
 export async function mountSignage(root, options = {}) {
-  const prefecture = getPrefecture(options.prefecture);
   const content = getContent(options.content);
+  const prefecture = content.locationScope === "national"
+    ? getPrefecture("national")
+    : getPrefecture(options.prefecture);
   const published = options.settings || settingsForSignage(prefecture.slug, content.id);
   const common = published.common || {};
   const contentSettings = published.content || published.contents?.[content.id] || {};
@@ -136,12 +138,12 @@ export async function mountSignage(root, options = {}) {
         prefecture,
         interactive: !!options.interactive,
         mode: content.id === "typhoon" ? "national" : "prefecture",
-        zoom: content.id === "typhoon" ? 4 : undefined,
-        center: content.id === "typhoon" ? [32, 132] : null,
-        maxFitZoom: content.id === "lightning_nowcast" || content.id === "tornado_nowcast" ? 7 : undefined
+        zoom: content.id === "typhoon" ? 5 : undefined,
+        center: content.id === "typhoon" ? [36.5, 136.2] : null,
+        maxFitZoom: undefined
       });
     } else if (content.id === "typhoon") {
-      map.setView([32, 132], 4);
+      map.setView([36.5, 136.2], 5);
     } else {
       map.setView(prefecture);
     }
@@ -180,6 +182,9 @@ export async function mountSignage(root, options = {}) {
     els.screen.dataset.ready = "1";
     fitTo();
     map.invalidate();
+    if (content.id === "typhoon") {
+      window.requestAnimationFrame(() => map.invalidate());
+    }
     return {
       prefecture,
       content,

@@ -1,12 +1,13 @@
 import { CONTENTS, getContent } from "./data/contents.js";
-import { PREFECTURES, getPrefecture } from "./data/prefectures.js";
-import { mountSignage } from "./signage-view.js";
-import { applyDesignTokens } from "./viewport.js";
+import { NATIONAL, getPrefecture } from "./data/prefectures.js";
 import {
   allCombos,
   comboStatus,
+  locationsForContent,
   loadDraft,
   persistPublishedFile,
+  PREVIEW_SETTINGS_KEY,
+  publicComboCount,
   publishCombo,
   publishDraft,
   saveDraft,
@@ -16,13 +17,27 @@ import {
 const $ = (id) => document.getElementById(id);
 
 const query = new URLSearchParams(location.search);
+const initialContent = getContent(query.get("content") || "weather_warning");
 const state = {
   store: loadDraft(),
-  prefecture: getPrefecture(query.get("prefecture") || "toyama").slug,
-  content: getContent(query.get("content") || "weather_warning").id,
-  preview: null,
-  previewSeq: 0
+  prefecture: initialContent.locationScope === "national"
+    ? NATIONAL.slug
+    : getPrefecture(query.get("prefecture") || "toyama").slug,
+  content: initialContent.id,
+  previewFrame: null
 };
+
+function locationChoices(contentId) {
+  return locationsForContent(getContent(contentId));
+}
+
+function syncLocationSelect() {
+  const places = locationChoices(state.content);
+  if (getContent(state.content).locationScope === "national") state.prefecture = NATIONAL.slug;
+  if (!places.some((item) => item.slug === state.prefecture)) state.prefecture = places[0].slug;
+  fillSelect($("pref-select"), places, (p) => p.slug, (p) => p.name, state.prefecture);
+  $("pref-select").disabled = places.length === 1;
+}
 
 function clampPlayMs(value) {
   const n = Number(value);
@@ -109,55 +124,56 @@ function statusLabel() {
   $("combo-status").dataset.status = status;
 }
 
-let previewQueue = Promise.resolve();
-
-function renderPreview() {
-  const seq = ++state.previewSeq;
-  previewQueue = previewQueue.catch(() => {}).then(() => runPreview(seq));
-  return previewQueue;
+function previewSettings() {
+  return {
+    common: state.store.common,
+    content: state.store.contents[state.content],
+    title: state.store.titles[state.content],
+    enabled: state.store.enabled[state.content]
+  };
 }
 
-async function runPreview(seq) {
-  if (seq !== state.previewSeq) return;
+function writePreviewSettings() {
+  sessionStorage.setItem(PREVIEW_SETTINGS_KEY, JSON.stringify(previewSettings()));
+}
+
+function previewSrc() {
+  const url = new URL("index.html", location.href);
+  url.searchParams.set("prefecture", state.prefecture);
+  url.searchParams.set("content", state.content);
+  url.searchParams.set("preview", "1");
+  url.searchParams.set("v", String(Date.now()));
+  return `${url.pathname}${url.search}`;
+}
+
+function previewFrame() {
   const host = $("preview-host");
-  if (state.preview) {
-    try { state.preview.destroy(); } catch { /* ignore */ }
-    if (state.preview.map) {
-      try { state.preview.map.destroy(); } catch { /* ignore */ }
-    }
-    state.preview = null;
+  let iframe = host.querySelector("iframe.admin-preview-frame");
+  if (!iframe) {
+    host.innerHTML = "";
+    iframe = document.createElement("iframe");
+    iframe.className = "admin-preview-frame";
+    iframe.title = "本番プレビュー";
+    iframe.addEventListener("load", pushPreviewTokens);
+    host.appendChild(iframe);
+    state.previewFrame = iframe;
   }
-  host.innerHTML = "";
-  const wrap = document.createElement("div");
-  wrap.className = "preview-scale";
-  host.appendChild(wrap);
-  try {
-    const preview = await mountSignage(wrap, {
-      prefecture: state.prefecture,
-      content: state.content,
-      settings: {
-        common: state.store.common,
-        content: state.store.contents[state.content],
-        title: state.store.titles[state.content],
-        enabled: state.store.enabled[state.content]
-      },
-      fit: true,
-      fitHost: host
-    });
-    if (seq !== state.previewSeq) {
-      try { preview.destroy(); } catch { /* ignore */ }
-      if (preview.map) {
-        try { preview.map.destroy(); } catch { /* ignore */ }
-      }
-      return;
-    }
-    state.preview = preview;
-    syncCurrentUrl();
-  } catch (error) {
-    if (seq !== state.previewSeq) return;
-    wrap.innerHTML = `<div class="data-error">プレビューを表示できませんでした</div>`;
-    toast(String(error.message || error));
-  }
+  return iframe;
+}
+
+function pushPreviewTokens() {
+  const iframe = state.previewFrame || $("preview-host")?.querySelector("iframe.admin-preview-frame");
+  if (!iframe?.contentWindow) return;
+  iframe.contentWindow.postMessage({
+    type: "disaster-preview-tokens",
+    common: state.store.common
+  }, location.origin);
+}
+
+function renderPreview() {
+  writePreviewSettings();
+  previewFrame().src = previewSrc();
+  syncCurrentUrl();
 }
 
 function syncCurrentUrl() {
@@ -184,7 +200,7 @@ function renderUrls() {
     if (qStatus && row.status !== qStatus) return false;
     return true;
   });
-  $("url-count").textContent = `${rows.length} / 235`;
+  $("url-count").textContent = `${rows.length} / ${publicComboCount()}`;
   $("url-table").innerHTML = rows.map((row) => {
     const url = publicHref(row.prefecture.slug, row.content.id);
     const current = row.prefecture.slug === state.prefecture && row.content.id === state.content ? " is-current" : "";
@@ -207,8 +223,8 @@ function toast(message) {
 }
 
 function bind() {
-  fillSelect($("pref-select"), PREFECTURES, (p) => p.slug, (p) => p.name, state.prefecture);
   fillSelect($("content-select"), CONTENTS, (c) => c.id, (c) => c.name, state.content);
+  syncLocationSelect();
   fillSelect($("url-content"), [{ id: "", name: "すべてのコンテンツ" }, ...CONTENTS], (c) => c.id, (c) => c.name, "");
   syncCommonInputs();
   syncContentInputs();
@@ -222,6 +238,7 @@ function bind() {
   });
   $("content-select").addEventListener("change", () => {
     state.content = $("content-select").value;
+    syncLocationSelect();
     syncContentInputs();
     statusLabel();
     renderUrls();
@@ -232,17 +249,8 @@ function bind() {
     el.addEventListener("input", () => {
       readCommonInputs();
       readContentInputs();
-      if (state.preview?.els?.screen) {
-        applyDesignTokens(state.preview.els.screen, { common: state.store.common });
-        const common = state.store.common;
-        state.preview.els.stamp.hidden = common.showStamp === false;
-        state.preview.els.point.hidden = common.showPoint === false;
-        state.preview.els.panel.hidden = common.showPanel === false;
-        state.preview.els.attr.hidden = common.showAttribution === false;
-        state.preview.els.title.hidden = common.showTitle === false;
-        state.preview.els.screen.classList.toggle("is-panel-off", common.showPanel === false);
-        state.preview.els.screen.classList.toggle("is-legend-off", common.showLegend === false);
-      }
+      writePreviewSettings();
+      pushPreviewTokens();
     });
     if (el.tagName === "INPUT" && (el.type === "number" || el.type === "checkbox")) {
       el.addEventListener("change", () => {
@@ -279,7 +287,7 @@ function bind() {
     statusLabel();
     renderUrls();
     await persistPublishedFile(state.store);
-    toast("235件を公開設定に反映しました");
+    toast(`${publicComboCount()}件を公開設定に反映しました`);
   });
   $("btn-open").addEventListener("click", () => {
     window.open(publicHref(state.prefecture, state.content), "_blank");
@@ -335,10 +343,11 @@ function bind() {
     }
     const row = event.target.closest("[data-open-pref]");
     if (!row) return;
-    $("pref-select").value = row.dataset.openPref;
     $("content-select").value = row.dataset.openContent;
-    state.prefecture = row.dataset.openPref;
     state.content = row.dataset.openContent;
+    state.prefecture = row.dataset.openPref;
+    syncLocationSelect();
+    $("pref-select").value = state.prefecture;
     syncContentInputs();
     statusLabel();
     renderUrls();

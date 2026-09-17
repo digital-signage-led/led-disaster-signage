@@ -104,8 +104,22 @@ const SLUG_ALIASES = {
   okinawa: "okinawa"
 };
 
+export const NATIONAL = {
+  id: "00",
+  slug: "national",
+  name: "全国",
+  region: "national",
+  regionName: "全国",
+  centerLatitude: 36.5,
+  centerLongitude: 136.2,
+  defaultZoom: 5,
+  dataId: "",
+  bounds: { north: 45.6, south: 24.2, east: 146.2, west: 123.2 }
+};
+
 export function getPrefecture(slugOrId) {
   const raw = String(slugOrId || "").toLowerCase();
+  if (raw === "national" || raw === "japan" || raw === "nationwide" || raw === "全国") return NATIONAL;
   const slug = SLUG_ALIASES[raw] || raw;
   return PREFECTURES.find((item) => item.slug === slug || item.id === String(slugOrId)) || PREFECTURES[12];
 }

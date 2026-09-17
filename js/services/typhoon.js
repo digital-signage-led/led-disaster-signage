@@ -24,12 +24,52 @@ function numberOrNull(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function latLon(value) {
+  if (Array.isArray(value) && value.length >= 2) {
+    const lat = Number(value[0]);
+    const lon = Number(value[1]);
+    return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+  }
+  return null;
+}
+
+function extrasFromForecast(item) {
+  if (!item) return {};
+  const gale = item.galeWarningArea;
+  const storm = item.stormWarningArea;
+  const circle = item.probabilityCircle;
+  const stormArc = Array.isArray(storm?.arc) ? storm.arc[0] : null;
+  return {
+    galeCenter: latLon(gale?.center),
+    galeRadiusKm: numberOrNull(gale?.radius) != null ? Number(gale.radius) / 1000 : null,
+    stormCenter: latLon(stormArc?.[0]) || latLon(item.center),
+    stormRadiusKm: numberOrNull(stormArc?.[1]) != null ? Number(stormArc[1]) / 1000 : null,
+    probabilityRadiusKm: numberOrNull(circle?.radius) != null ? Number(circle.radius) / 1000 : null
+  };
+}
+
+function forecastByHours(forecast) {
+  const map = new Map();
+  for (const item of forecast || []) {
+    if (item?.advancedHours == null) continue;
+    map.set(Number(item.advancedHours), item);
+  }
+  return map;
+}
+
 function normalizeStorm(meta, spec, forecast) {
   const title = (spec || []).find((item) => item.part === "title") || {};
   const analysis = pickAnalysis(spec);
   const forecasts = pickForecasts(spec);
   const trackPart = (forecast || []).find((item) => item.track) || null;
-  const center = analysis?.position?.deg || trackPart?.center || null;
+  const extraByHours = forecastByHours(forecast);
+  const hour0 = extraByHours.get(0) || extraByHours.get(Number(analysis?.advancedHours));
+  const galeItem = (forecast || []).find((item) => item?.galeWarningArea);
+  const analysisExtra = {
+    ...extrasFromForecast(hour0),
+    ...extrasFromForecast(galeItem)
+  };
+  const center = latLon(analysis?.position?.deg) || latLon(trackPart?.center);
   return {
     tcId: meta.tropicalCyclone || "",
     typhoonNumber: title.typhoonNumber || meta.typhoonNumber || "",
@@ -45,22 +85,32 @@ function normalizeStorm(meta, spec, forecast) {
     maxWindMs: numberOrNull(analysis?.maximumWind?.sustained?.["m/s"]),
     gustMs: numberOrNull(analysis?.maximumWind?.gust?.["m/s"]),
     intensity: analysis?.intensity && analysis.intensity !== "-" ? analysis.intensity : "",
-    center: Array.isArray(center) && center.length >= 2 ? { lat: Number(center[0]), lon: Number(center[1]) } : null,
+    center,
+    galeCenter: analysisExtra.galeCenter,
+    galeRadiusKm: analysisExtra.galeRadiusKm,
+    stormRadiusKm: analysisExtra.stormRadiusKm,
     track: trackPart?.track || { preTyphoon: [], typhoon: [] },
-    forecasts: forecasts.map((item) => ({
-      label: partName(item.part),
-      hours: item.advancedHours,
-      validAt: parseJst(item.validtime?.JST),
-      location: item.location || "",
-      course: item.course || "",
-      speedKmh: numberOrNull(item.speed?.["km/h"]),
-      pressure: numberOrNull(item.pressure),
-      maxWindMs: numberOrNull(item.maximumWind?.sustained?.["m/s"]),
-      gustMs: numberOrNull(item.maximumWind?.gust?.["m/s"]),
-      category: item.category?.jp || "",
-      center: Array.isArray(item.position?.deg) ? { lat: Number(item.position.deg[0]), lon: Number(item.position.deg[1]) } : null,
-      radiusKm: numberOrNull(item.probabilityCircleRadius?.km)
-    })).filter((item) => item.center)
+    forecasts: forecasts.map((item) => {
+      const extra = extrasFromForecast(extraByHours.get(Number(item.advancedHours)));
+      return {
+        label: partName(item.part),
+        hours: item.advancedHours,
+        validAt: parseJst(item.validtime?.JST),
+        location: item.location || "",
+        course: item.course || "",
+        speedKmh: numberOrNull(item.speed?.["km/h"]),
+        pressure: numberOrNull(item.pressure),
+        maxWindMs: numberOrNull(item.maximumWind?.sustained?.["m/s"]),
+        gustMs: numberOrNull(item.maximumWind?.gust?.["m/s"]),
+        category: item.category?.jp || "",
+        center: latLon(item.position?.deg) || latLon(extraByHours.get(Number(item.advancedHours))?.center),
+        radiusKm: extra.probabilityRadiusKm || numberOrNull(item.probabilityCircleRadius?.km),
+        galeRadiusKm: extra.galeRadiusKm,
+        galeCenter: extra.galeCenter,
+        stormRadiusKm: extra.stormRadiusKm,
+        stormCenter: extra.stormCenter
+      };
+    }).filter((item) => item.center)
   };
 }
 

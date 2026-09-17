@@ -19,12 +19,12 @@
 ```
 index.html?prefecture=tokyo&content=weather_warning
 index.html?prefecture=osaka&content=early_warning
-index.html?prefecture=tokyo&content=typhoon
+index.html?prefecture=national&content=typhoon
 index.html?prefecture=osaka&content=lightning_nowcast
 index.html?prefecture=osaka&content=tornado_nowcast
 ```
 
-235通り（47 × 5）を同じ画面で表示します。
+189通り（47都道府県 × 4コンテンツ + 台風全国1件）を同じ画面で表示します。台風情報は全国のみです。
 
 ## 管理画面
 
@@ -55,7 +55,7 @@ GitHub Pages（天気予報・雨レーダーと同じ main / 公開）:
 - 管理画面 https://digital-signage-led.github.io/led-disaster-signage/admin.html
 - 気象警報・注意報 https://digital-signage-led.github.io/led-disaster-signage/?prefecture=tokyo&content=weather_warning
 - 早期注意情報 https://digital-signage-led.github.io/led-disaster-signage/?prefecture=tokyo&content=early_warning
-- 台風情報 https://digital-signage-led.github.io/led-disaster-signage/?prefecture=tokyo&content=typhoon
+- 台風情報 https://digital-signage-led.github.io/led-disaster-signage/?prefecture=national&content=typhoon
 - 雷ナウキャスト https://digital-signage-led.github.io/led-disaster-signage/?prefecture=osaka&content=lightning_nowcast
 - 竜巻発生確度ナウキャスト https://digital-signage-led.github.io/led-disaster-signage/?prefecture=osaka&content=tornado_nowcast
 

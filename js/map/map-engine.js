@@ -8,7 +8,6 @@ const NEIGHBOR_GEOJSON = new URL("../../data/east-asia-neighbors.geojson", impor
 const TRANSPARENT = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 const SEA = "#6e9bb8";
 const EAST_ASIA_BOUNDS = [[8.0, 110.0], [50.0, 150.0]];
-const NEAR_COUNTRY_BOUNDS = { west: 120.2, south: 20.8, east: 150.0, north: 47.2 };
 
 function intersectEdge(a, b, edge) {
   const [ax, ay] = a;
@@ -87,13 +86,13 @@ function clipFeatureToBbox(feature, bbox) {
   return null;
 }
 
-function clipGeoToBounds(geo, bounds, pad = 0.08) {
+function clipGeoToBounds(geo, bounds, pad = 2.8) {
   if (!geo || !bounds) return { type: "FeatureCollection", features: [] };
   const bbox = {
-    west: Math.max(NEAR_COUNTRY_BOUNDS.west, bounds.getWest() - pad),
-    south: Math.max(NEAR_COUNTRY_BOUNDS.south, bounds.getSouth() - pad),
-    east: Math.min(NEAR_COUNTRY_BOUNDS.east, bounds.getEast() + pad),
-    north: Math.min(NEAR_COUNTRY_BOUNDS.north, bounds.getNorth() + pad)
+    west: bounds.getWest() - pad,
+    south: bounds.getSouth() - pad,
+    east: bounds.getEast() + pad,
+    north: bounds.getNorth() + pad
   };
   if (bbox.west >= bbox.east || bbox.south >= bbox.north) {
     return { type: "FeatureCollection", features: [] };
@@ -169,7 +168,7 @@ function neighborStrokeStyle() {
   return {
     fill: false,
     color: "#5f666e",
-    weight: 1.2,
+    weight: 2,
     opacity: 1,
     lineJoin: "round",
     lineCap: "round"
@@ -226,9 +225,7 @@ function waitSize(el) {
 }
 
 function prefMaxZoom(pref, cap) {
-  const isHokkaido = pref?.slug === "hokkaido";
-  const bump = isHokkaido ? 0.2 : 0.8;
-  const base = Math.min(10.5, (Number(pref?.defaultZoom) || 8.5) + bump + (Number(pref?.zoomBoost) || 0));
+  const base = Math.min(11, (Number(pref?.defaultZoom) || 8.5) + (Number(pref?.zoomBoost) || 0));
   return cap != null ? Math.min(base, Number(cap)) : base;
 }
 
@@ -245,16 +242,18 @@ function prefLatLngBounds(L, pref) {
 function applyPrefView(map, L, pref, cap) {
   const bounds = prefLatLngBounds(L, pref);
   if (bounds) {
-    map.fitBounds(bounds, {
-      padding: pref?.slug === "hokkaido" ? [16, 16] : [2, 2],
-      maxZoom: prefMaxZoom(pref, cap),
+    map.fitBounds(bounds.pad(0.06), {
+      padding: [28, 28],
+      maxZoom: 12,
       animate: false
     });
+    const ceiling = cap != null ? Number(cap) : 12;
+    map.setZoom(Math.min(map.getZoom() + Math.log2(1.25), ceiling), { animate: false });
     return;
   }
   map.setView(
     [pref.centerLatitude, pref.centerLongitude],
-    Math.min(prefMaxZoom(pref, cap), clampPrefZoom(pref.defaultZoom, pref)),
+    cap != null ? Math.min(Number(cap), prefMaxZoom(pref)) : clampPrefZoom(pref.defaultZoom, pref),
     { animate: false }
   );
 }
@@ -304,9 +303,9 @@ export async function createMap(container, { prefecture, interactive = false, mo
     keyboard: false,
     tap: false,
     minZoom: 3.5,
-    maxZoom: 11,
-    zoomSnap: 1,
-    zoomDelta: 1,
+    maxZoom: 12,
+    zoomSnap: 0.25,
+    zoomDelta: 0.5,
     fadeAnimation: false,
     zoomAnimation: false,
     markerZoomAnimation: false
@@ -345,18 +344,13 @@ export async function createMap(container, { prefecture, interactive = false, mo
   let neighborFillLayer = null;
   let neighborStrokeLayer = null;
   const paintNeighbors = () => {
-    if (!neighborGeo) return;
-    const bounds = map.getBounds();
-    if (!bounds || !bounds.isValid?.()) return;
-    const clipped = clipGeoToBounds(neighborGeo, bounds);
-    if (neighborFillLayer) map.removeLayer(neighborFillLayer);
-    if (neighborStrokeLayer) map.removeLayer(neighborStrokeLayer);
-    neighborFillLayer = L.geoJSON(clipped, {
+    if (!neighborGeo || neighborFillLayer) return;
+    neighborFillLayer = L.geoJSON(neighborGeo, {
       pane: "neighborFillPane",
       interactive: false,
       style: neighborFillStyle
     }).addTo(map);
-    neighborStrokeLayer = L.geoJSON(clipped, {
+    neighborStrokeLayer = L.geoJSON(neighborGeo, {
       pane: "neighborStrokePane",
       interactive: false,
       style: neighborStrokeStyle
@@ -380,7 +374,6 @@ export async function createMap(container, { prefecture, interactive = false, mo
     applyPrefView(map, L, prefecture, fitCap);
   }
   paintNeighbors();
-  map.on("moveend", paintNeighbors);
   container._leaflet = map;
 
   let tileOverlay = null;
@@ -440,8 +433,8 @@ export async function createMap(container, { prefecture, interactive = false, mo
       paintPrefs();
       tileOverlay = L.tileLayer(urlTemplate, {
         pane: "nowcastPane",
-        opacity: 0.78,
-        maxZoom: 11,
+        opacity: 0.5,
+        maxZoom: 12,
         maxNativeZoom: 6,
         minZoom: 3.5,
         minNativeZoom: 5,

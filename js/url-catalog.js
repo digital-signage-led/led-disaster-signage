@@ -1,6 +1,5 @@
 import { CONTENTS } from "./data/contents.js";
-import { PREFECTURES } from "./data/prefectures.js";
-import { signageUrl } from "./store.js";
+import { locationsForContent, signageUrl } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -11,16 +10,17 @@ function publicHref(pref, content) {
 function rows() {
   const qPref = $("q-pref").value.trim();
   const qContent = $("q-content").value;
-  return PREFECTURES.flatMap((pref) => (
-    CONTENTS
-      .filter((content) => !qContent || content.id === qContent)
-      .filter(() => !qPref || `${pref.name}${pref.slug}`.includes(qPref))
-      .map((content) => ({
-        pref,
-        content,
-        url: publicHref(pref.slug, content.id)
-      }))
-  ));
+  return CONTENTS
+    .filter((content) => !qContent || content.id === qContent)
+    .flatMap((content) => (
+      locationsForContent(content)
+        .filter((pref) => !qPref || `${pref.name}${pref.slug}`.includes(qPref))
+        .map((pref) => ({
+          pref,
+          content,
+          url: publicHref(pref.slug, content.id)
+        }))
+    ));
 }
 
 function tsv(list) {

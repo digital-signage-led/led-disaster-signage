@@ -11,7 +11,7 @@ export function timesBlock({ reportAt, fetchedAt, fromCache, reportLabel = "発�
         <span class="k">画面取得</span>
         <strong>${formatClock(fetchedAt)}</strong>
       </div>
-      ${fromCache ? `<div class="cache-note">前回取得データを表示</div>` : ""}
+      ${fromCache ? `<div class="cache-note">更新停止中（前回取得データを表示）</div>` : ""}
     </div>
   `;
 }
@@ -37,12 +37,18 @@ export function playController({ frames, playMs, onFrame, holdMs = 2400, startIn
 
   const step = () => {
     if (stopped || !frames.length) return;
-    onFrame(frames[index], index, frames.length);
-    const isNow = frames[index]?.validtime && frames[index].validtime === frames[index].basetime;
+    const frame = frames[index];
+    try {
+      onFrame(frame, index, frames.length);
+    } catch (error) {
+      console.error(error);
+    }
+    const isNow = frame?.step?.kind === "now"
+      || (frame?.validtime && frame.validtime === frame.basetime && frame?.step?.kind !== "forecast");
     const isLast = index === frames.length - 1;
-    const delay = isLast || isNow ? holdMs : (playMs || 1800);
+    const wait = Number(isLast || isNow ? holdMs : playMs);
     index = (index + 1) % frames.length;
-    timer = window.setTimeout(step, Math.max(1200, delay));
+    timer = window.setTimeout(step, Math.max(1600, Number.isFinite(wait) ? wait : 2200));
   };
 
   step();

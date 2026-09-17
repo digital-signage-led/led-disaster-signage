@@ -3,10 +3,19 @@
  * サイネージ本番は公開設定のみ読む。同じ公開URLのまま設定を更新する。
  */
 import { CONTENTS } from "./data/contents.js";
-import { PREFECTURES } from "./data/prefectures.js";
+import { NATIONAL, PREFECTURES } from "./data/prefectures.js";
+
+export function locationsForContent(content) {
+  return (content?.locationScope || "prefecture") === "national" ? [NATIONAL] : PREFECTURES;
+}
+
+export function publicComboCount() {
+  return CONTENTS.reduce((sum, content) => sum + locationsForContent(content).length, 0);
+}
 
 export const DRAFT_KEY = "disaster-draft-v1";
 export const PUBLISHED_KEY = "disaster-published-v1";
+export const PREVIEW_SETTINGS_KEY = "disaster-preview-settings";
 
 export function comboKey(prefecture, content) {
   return `${prefecture}:${content}`;
@@ -37,7 +46,7 @@ export function defaultContentSettings() {
   return {
     weather_warning: { showHeadline: true, showMunicipality: false },
     early_warning: { compact: false },
-    typhoon: { rotateMs: 12000 },
+    typhoon: { rotateMs: 3000 },
     lightning_nowcast: { playMs: 2000 },
     tornado_nowcast: { playMs: 2000 }
   };
@@ -51,7 +60,7 @@ export function emptyStore() {
   for (const content of CONTENTS) {
     enabled[content.id] = true;
     titles[content.id] = "";
-    for (const pref of PREFECTURES) {
+    for (const pref of locationsForContent(content)) {
       status[comboKey(pref.slug, content.id)] = "published";
     }
   }
@@ -169,7 +178,7 @@ export function allCombos() {
   const rows = [];
   const contents = CONTENTS.slice().sort((a, b) => draft.order.indexOf(a.id) - draft.order.indexOf(b.id));
   for (const content of contents) {
-    for (const pref of PREFECTURES) {
+    for (const pref of locationsForContent(content)) {
       const key = comboKey(pref.slug, content.id);
       rows.push({
         key,
