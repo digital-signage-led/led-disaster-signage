@@ -1,7 +1,7 @@
 import { getContent } from "./data/contents.js";
 import { getPrefecture } from "./data/prefectures.js";
 import { bindAutoFit, buildScreen, mountSignage, paintKnownUi, refreshDelayFor } from "./signage-view.js";
-import { settingsForSignage, PREVIEW_SETTINGS_KEY } from "./store.js";
+import { persistOfficialPublished, settingsForSignage, PREVIEW_SETTINGS_KEY } from "./store.js";
 import { applyDesignTokens } from "./viewport.js";
 import { warmupMap } from "./map/map-engine.js";
 
@@ -28,6 +28,7 @@ const content = getContent(params.get("content") || "weather_warning");
 const prefecture = content.locationScope === "national"
   ? getPrefecture("national")
   : getPrefecture(params.get("prefecture") || params.get("pref") || params.get("region") || "tokyo");
+persistOfficialPublished();
 const previewSettings = readPreviewSettings();
 const published = previewSettings || settingsForSignage(prefecture.slug, content.id);
 

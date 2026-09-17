@@ -113,11 +113,19 @@ function writeKey(key, value) {
 }
 
 export function loadDraft() {
-  return mergeStore(emptyStore(), readKey(DRAFT_KEY));
+  return ensureOfficialPublished(mergeStore(emptyStore(), readKey(DRAFT_KEY)));
 }
 
 export function loadPublished() {
-  return mergeStore(emptyStore(), readKey(PUBLISHED_KEY));
+  return ensureOfficialPublished(mergeStore(emptyStore(), readKey(PUBLISHED_KEY)));
+}
+
+export function persistOfficialPublished() {
+  const published = loadPublished();
+  if (!published.publishedAt) published.publishedAt = new Date().toISOString();
+  writeKey(PUBLISHED_KEY, published);
+  writeKey(DRAFT_KEY, loadDraft());
+  return published;
 }
 
 export function saveDraft(store) {
@@ -156,8 +164,18 @@ export function publishCombo(store, prefecture, content) {
   return { draft, published };
 }
 
+function ensureOfficialPublished(store) {
+  for (const content of CONTENTS) {
+    if (store.enabled[content.id] === false) store.enabled[content.id] = true;
+    for (const pref of locationsForContent(content)) {
+      store.status[comboKey(pref.slug, content.id)] = "published";
+    }
+  }
+  return store;
+}
+
 export function comboStatus(store, prefecture, content) {
-  return store.status[comboKey(prefecture, content)] || "draft";
+  return store.status[comboKey(prefecture, content)] || "published";
 }
 
 export function settingsForSignage(prefecture, content) {
@@ -184,7 +202,7 @@ export function allCombos() {
         key,
         prefecture: pref,
         content,
-        status: published.status[key] === "published" ? "published" : (draft.status[key] || "draft"),
+        status: published.status[key] === "draft" || draft.status[key] === "draft" ? "draft" : "published",
         enabled: draft.enabled[content.id] !== false
       });
     }

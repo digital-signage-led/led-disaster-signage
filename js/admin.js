@@ -5,6 +5,7 @@ import {
   comboStatus,
   locationsForContent,
   loadDraft,
+  persistOfficialPublished,
   persistPublishedFile,
   PREVIEW_SETTINGS_KEY,
   publicComboCount,
@@ -18,6 +19,8 @@ const $ = (id) => document.getElementById(id);
 
 const query = new URLSearchParams(location.search);
 const initialContent = getContent(query.get("content") || "weather_warning");
+persistOfficialPublished();
+
 const state = {
   store: loadDraft(),
   prefecture: initialContent.locationScope === "national"
