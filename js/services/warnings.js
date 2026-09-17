@@ -1,5 +1,5 @@
 import { classFromStatus, isActiveStatus, kindInfo } from "../data/warning-kinds.js";
-import { cacheKey, loadLastGood, saveLastGood } from "./cache.js";
+import { cacheKey, loadLastGood, peekLastGood, saveLastGood } from "./cache.js";
 import { areaName, loadArea } from "./area.js";
 import { WARNING_R8_URL, WARNING_URL, fetchJson, parseJst } from "./jma-common.js";
 
@@ -82,9 +82,10 @@ function normalizeItems(rawItems, area) {
     });
 }
 
-export async function loadWarnings(prefecture) {
+export async function loadWarnings(prefecture, hooks = {}) {
   const key = cacheKey(prefecture.slug, "weather_warning");
   const office = prefecture.dataId;
+  peekLastGood(key, hooks.onCached);
   try {
     const [area, r8] = await Promise.all([
       loadArea().catch(() => null),

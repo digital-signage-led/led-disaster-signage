@@ -3,12 +3,15 @@ import { renderThunderNowcast } from "./contents/thunder-nowcast.js";
 import { renderTornadoNowcast } from "./contents/tornado-nowcast.js";
 import { renderTyphoon } from "./contents/typhoon.js";
 import { renderWarnings } from "./contents/warnings.js";
+import { staticPanel, legendHtml } from "./contents/shared-ui.js";
 import { getContent } from "./data/contents.js";
 import { getPrefecture, regionOf } from "./data/prefectures.js";
 import { createMap, MAP_ATTRIBUTION } from "./map/map-engine.js";
 import { formatStamp, nextForecastRefreshDelay } from "./services/jma-common.js";
 import { settingsForSignage } from "./store.js";
 import { applyDesignTokens, fitFixedScreen, measureVisibleBox, FIXED_DESIGN } from "./viewport.js";
+import { THUNDER_LEGEND } from "./services/thunder-nowcast.js";
+import { TORNADO_LEGEND } from "./services/tornado-nowcast.js";
 
 const RENDERERS = {
   weather_warning: renderWarnings,
@@ -43,7 +46,7 @@ function screenHtml() {
 }
 
 export function buildScreen(root) {
-  root.innerHTML = screenHtml();
+  if (!root.querySelector(".led-screen")) root.innerHTML = screenHtml();
   const screen = root.querySelector(".led-screen");
   return {
     root,
@@ -56,6 +59,51 @@ export function buildScreen(root) {
     stage: screen.querySelector(".content-stage"),
     attr: screen.querySelector(".map-attribution")
   };
+}
+
+function panelHint(content) {
+  if (content.id === "weather_warning") return content.description;
+  if (content.id === "early_warning") return "気象庁が［高］［中］で示す、警報級の現象となる可能性です。独自の危険度判定はしていません。";
+  if (content.id === "lightning_nowcast") return "気象庁の雷ナウキャストです。色は公式の活動度です。この地域に雷がなければ地図は無色のままです。";
+  if (content.id === "tornado_nowcast") return "気象庁の竜巻発生確度ナウキャストです。この地域に該当がなければ地図は無色のままです。";
+  return "";
+}
+
+function panelLegend(content) {
+  if (content.id === "early_warning") {
+    return `<div class="legend"><span class="legend-step"><i style="background:#c62828"></i>高</span><span class="legend-step"><i style="background:#f9a825"></i>中</span></div>`;
+  }
+  if (content.id === "lightning_nowcast") return `<div class="legend">${legendHtml(THUNDER_LEGEND)}</div>`;
+  if (content.id === "tornado_nowcast") return `<div class="legend">${legendHtml(TORNADO_LEGEND)}</div>`;
+  return "";
+}
+
+export function paintKnownUi(els, prefecture, content, published = {}) {
+  const common = published.common || {};
+  const customTitle = published.title || "";
+  els.screen.dataset.prefecture = prefecture.slug;
+  els.screen.dataset.content = content.id;
+  els.screen.classList.add("is-map");
+  if (content.id === "typhoon") els.screen.classList.add("is-typhoon-map");
+  els.title.textContent = customTitle || `${prefecture.name}｜${content.name}`;
+  if (!els.stamp.textContent || els.stamp.textContent === "データ取得中") els.stamp.textContent = "—";
+  els.point.textContent = content.id === "typhoon" ? "全国" : regionOf(prefecture.slug).name;
+  els.attr.textContent = content.id === "typhoon" ? "出典：気象庁" : MAP_ATTRIBUTION;
+  if (els.stage) {
+    els.stage.hidden = true;
+    els.stage.innerHTML = "";
+  }
+  if (!els.panel.dataset.ready) {
+    els.panel.innerHTML = staticPanel({
+      kicker: content.shortName === "早期注意" ? "早期注意情報" : content.name.replace("（警報級の可能性）", "").replace("発生確度ナウキャスト", "発生確度"),
+      area: prefecture.name,
+      hint: panelHint(content),
+      legend: panelLegend(content)
+    });
+    els.panel.dataset.ready = "1";
+  }
+  applyDesignTokens(els.screen, { common });
+  applyVisibility(els, common);
 }
 
 function applyVisibility(els, common) {
@@ -93,45 +141,32 @@ export async function mountSignage(root, options = {}) {
   const published = options.settings || settingsForSignage(prefecture.slug, content.id);
   const common = published.common || {};
   const contentSettings = published.content || published.contents?.[content.id] || {};
-  const cleanups = [];
-  const els = root.querySelector(".led-screen") ? {
-    root,
-    screen: root.querySelector(".led-screen"),
-    title: root.querySelector(".led-title"),
-    stamp: root.querySelector(".led-stamp"),
-    point: root.querySelector(".led-point"),
-    panel: root.querySelector(".info-panel"),
-    mapCanvas: root.querySelector(".map-canvas"),
-    stage: root.querySelector(".content-stage"),
-    attr: root.querySelector(".map-attribution")
-  } : buildScreen(root);
+  const shellCleanups = [];
+  const dataCleanups = [];
+  const els = buildScreen(root);
+  paintKnownUi(els, prefecture, content, published);
+  const fitTo = bindFit(els, options, shellCleanups);
 
-  els.screen.dataset.prefecture = prefecture.slug;
-  els.screen.dataset.content = content.id;
-  els.screen.classList.add("is-map");
-  const customTitle = published.title || "";
-  els.title.textContent = customTitle || `${prefecture.name}｜${content.name}`;
-  els.stamp.textContent = "データ取得中";
-  els.point.textContent = regionOf(prefecture.slug).name;
-  els.attr.textContent = MAP_ATTRIBUTION;
-  if (els.stage) {
-    els.stage.hidden = true;
-    els.stage.innerHTML = "";
-  }
-  applyDesignTokens(els.screen, { common });
-  applyVisibility(els, common);
-  const fitTo = bindFit(els, options, cleanups);
+  const runDataCleanups = () => {
+    dataCleanups.splice(0).forEach((fn) => {
+      try { fn(); } catch { /* ignore */ }
+    });
+  };
 
   if (published.enabled === false) {
     els.panel.innerHTML = `<div class="data-empty">このコンテンツは管理画面で非表示に設定されています</div>`;
     els.stamp.textContent = "非表示";
     return {
       prefecture, content, map: null, els, data: { ok: true, hidden: true },
-      destroy() { cleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } }); }
+      async refresh() { return { ok: true, hidden: true }; },
+      destroy() {
+        runDataCleanups();
+        shellCleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
+      }
     };
   }
 
-  let map = options.map || null;
+  let map = options.map || els.mapCanvas._mapApi || null;
   try {
     if (!map) {
       map = await createMap(els.mapCanvas, {
@@ -142,6 +177,7 @@ export async function mountSignage(root, options = {}) {
         center: content.id === "typhoon" ? [36.5, 136.2] : null,
         maxFitZoom: undefined
       });
+      els.mapCanvas._mapApi = map;
     } else if (content.id === "typhoon") {
       map.setView([36.5, 136.2], 5);
     } else {
@@ -154,7 +190,11 @@ export async function mountSignage(root, options = {}) {
     els.stamp.textContent = "地図初期化失敗";
     return {
       prefecture, content, map: null, els, data: { ok: false, error: String(error.message || error) },
-      destroy() { cleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } }); }
+      async refresh() { return { ok: false }; },
+      destroy() {
+        runDataCleanups();
+        shellCleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
+      }
     };
   }
 
@@ -165,23 +205,28 @@ export async function mountSignage(root, options = {}) {
     contentSettings,
     map,
     els,
-    addCleanup(fn) { cleanups.push(fn); }
+    addCleanup(fn) { dataCleanups.push(fn); }
   };
 
-  try {
+  const applyData = async () => {
     const render = RENDERERS[content.id] || renderWarnings;
     const data = await render(ctx);
     const dataAt = data?.reportAt || data?.dataUpdatedAt || null;
     if (data?.ok) {
       els.stamp.textContent = dataAt
         ? `${formatStamp(dataAt)}${data.fromCache ? "（前回データ）" : ""}`
-        : "更新時刻を確認中";
-    } else {
+        : els.stamp.textContent || "—";
+    } else if (!els.screen.dataset.ready) {
       els.stamp.textContent = "気象データを取得できませんでした";
     }
     els.screen.dataset.ready = "1";
     fitTo();
     map.invalidate();
+    return data;
+  };
+
+  try {
+    const data = await applyData();
     if (content.id === "typhoon") {
       window.requestAnimationFrame(() => map.invalidate());
     }
@@ -191,19 +236,31 @@ export async function mountSignage(root, options = {}) {
       map,
       els,
       data,
+      async refresh() {
+        try {
+          const next = await applyData();
+          this.data = next;
+          return next;
+        } catch (error) {
+          console.error(error);
+          return this.data;
+        }
+      },
       destroy() {
-        cleanups.forEach((fn) => {
-          try { fn(); } catch { /* ignore */ }
-        });
+        runDataCleanups();
+        shellCleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
       }
     };
   } catch (error) {
-    els.panel.innerHTML = `<div class="data-error">表示処理でエラーが発生しました</div>`;
-    els.stamp.textContent = "表示エラー";
+    if (!els.panel.textContent) {
+      els.panel.innerHTML = `<div class="data-error">表示処理でエラーが発生しました</div>`;
+    }
     return {
       prefecture, content, map, els, data: { ok: false, error: String(error.message || error) },
+      async refresh() { return this.data; },
       destroy() {
-        cleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
+        runDataCleanups();
+        shellCleanups.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
       }
     };
   }

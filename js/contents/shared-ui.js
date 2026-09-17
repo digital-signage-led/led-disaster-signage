@@ -30,7 +30,45 @@ export function legendHtml(steps) {
   )).join("");
 }
 
-export function playController({ frames, playMs, onFrame, holdMs = 2400, startIndex = 0 }) {
+export function staticPanel({ kicker, area, hint = "", legend = "" }) {
+  return `
+    <div class="panel-kicker">${kicker}</div>
+    <div class="panel-area">${area}</div>
+    ${hint ? `<p class="wx-hint">${hint}</p>` : ""}
+    ${legend}
+    <div class="panel-body"></div>
+    <div class="time-grid">
+      <div><span class="k">更新時刻</span><strong>—</strong></div>
+      <div><span class="k">画面取得</span><strong>—</strong></div>
+    </div>
+  `;
+}
+
+export function fillPanelBody(panel, html) {
+  if (!panel) return;
+  let body = panel.querySelector(".panel-body");
+  if (!body) {
+    body = document.createElement("div");
+    body.className = "panel-body";
+    const times = panel.querySelector(".time-grid");
+    if (times) times.before(body);
+    else panel.appendChild(body);
+  }
+  if (body.innerHTML !== html) body.innerHTML = html;
+}
+
+export function fillTimes(panel, opts) {
+  if (!panel) return;
+  const current = panel.querySelector(".time-grid");
+  const wrap = document.createElement("div");
+  wrap.innerHTML = timesBlock(opts).trim();
+  const next = wrap.firstElementChild;
+  if (!next) return;
+  if (current) current.replaceWith(next);
+  else panel.appendChild(next);
+}
+
+export function playController({ frames, playMs, onFrame, holdMs = 2400, startIndex = 0, onPrefetch = null }) {
   let index = Math.max(0, Math.min(frames.length - 1, Number(startIndex) || 0));
   let timer = 0;
   let stopped = false;
@@ -40,6 +78,11 @@ export function playController({ frames, playMs, onFrame, holdMs = 2400, startIn
     const frame = frames[index];
     try {
       onFrame(frame, index, frames.length);
+      if (onPrefetch) {
+        const next = frames[(index + 1) % frames.length];
+        const after = frames[(index + 2) % frames.length];
+        onPrefetch(next, after, frame);
+      }
     } catch (error) {
       console.error(error);
     }

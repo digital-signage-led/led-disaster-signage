@@ -1,8 +1,11 @@
 import { getContent } from "./data/contents.js";
 import { getPrefecture } from "./data/prefectures.js";
-import { bindAutoFit, mountSignage, refreshDelayFor } from "./signage-view.js";
-import { PREVIEW_SETTINGS_KEY } from "./store.js";
+import { bindAutoFit, buildScreen, mountSignage, paintKnownUi, refreshDelayFor } from "./signage-view.js";
+import { settingsForSignage, PREVIEW_SETTINGS_KEY } from "./store.js";
 import { applyDesignTokens } from "./viewport.js";
+import { warmupMap } from "./map/map-engine.js";
+
+warmupMap();
 
 function readPreviewSettings() {
   const params = new URLSearchParams(location.search);
@@ -15,44 +18,57 @@ function readPreviewSettings() {
   }
 }
 
+function registerWorker() {
+  if (!("serviceWorker" in navigator) || !location.protocol.startsWith("http")) return;
+  navigator.serviceWorker.register(new URL("../sw.js", import.meta.url), { scope: "./" }).catch(() => {});
+}
+
 const params = new URLSearchParams(location.search);
 const content = getContent(params.get("content") || "weather_warning");
 const prefecture = content.locationScope === "national"
   ? getPrefecture("national")
   : getPrefecture(params.get("prefecture") || params.get("pref") || params.get("region") || "tokyo");
+const previewSettings = readPreviewSettings();
+const published = previewSettings || settingsForSignage(prefecture.slug, content.id);
 
 document.title = `${prefecture.name}｜${content.name}`;
 document.documentElement.classList.remove("is-boot");
 
 const root = document.getElementById("app");
+const els = buildScreen(root);
+paintKnownUi(els, prefecture, content, published);
+
 let session = null;
 let fitOff = null;
 let timer = 0;
 let refreshing = false;
 
-async function render() {
+async function start() {
   if (refreshing) return;
   refreshing = true;
   try {
-    if (session) {
-      session.destroy();
-      if (session.map) {
-        try { session.map.destroy(); } catch { /* ignore */ }
-      }
-    }
-    root.innerHTML = "";
     session = await mountSignage(root, {
       prefecture: prefecture.slug,
       content: content.id,
-      settings: readPreviewSettings()
+      settings: previewSettings,
+      map: session?.map || els.mapCanvas._mapApi || null
     });
     if (fitOff) fitOff();
     fitOff = bindAutoFit(session.els.screen);
   } catch (error) {
     console.error(error);
-    if (!root.querySelector(".led-screen")) {
-      root.innerHTML = `<article class="led-screen"><div class="data-error">画面を表示できませんでした</div></article>`;
-    }
+  } finally {
+    refreshing = false;
+  }
+}
+
+async function refreshData() {
+  if (!session?.refresh || refreshing) return;
+  refreshing = true;
+  try {
+    await session.refresh();
+  } catch (error) {
+    console.error(error);
   } finally {
     refreshing = false;
   }
@@ -61,16 +77,17 @@ async function render() {
 function schedule() {
   window.clearTimeout(timer);
   timer = window.setTimeout(async () => {
-    await render();
+    await refreshData();
     schedule();
   }, refreshDelayFor(content.id));
 }
 
-await render();
+registerWorker();
+await start();
 schedule();
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) render();
+  if (!document.hidden) refreshData();
 });
 
 window.addEventListener("message", (event) => {

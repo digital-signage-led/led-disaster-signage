@@ -1,4 +1,4 @@
-import { cacheKey, loadLastGood, saveLastGood } from "./cache.js";
+import { cacheKey, loadLastGood, peekLastGood, saveLastGood } from "./cache.js";
 import { NOWC_N3_URL, fetchJson, nowcTileUrl, nowcToDate } from "./jma-common.js";
 
 function hasElement(entry, name) {
@@ -11,8 +11,9 @@ export const TORNADO_LEGEND = [
   { color: "#fa2900", label: "発生確度2", meaning: "竜巻などの激しい突風が発生する可能性が高い" }
 ];
 
-export async function loadTornadoNowcast(prefecture) {
+export async function loadTornadoNowcast(prefecture, hooks = {}) {
   const key = cacheKey(prefecture.slug, "tornado_nowcast");
+  peekLastGood(key, hooks.onCached);
   try {
     const times = await fetchJson(`${NOWC_N3_URL}?_=${Date.now()}`);
     const frames = (Array.isArray(times) ? times : [])

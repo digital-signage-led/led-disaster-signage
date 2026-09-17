@@ -1,23 +1,35 @@
-import { loadTornadoNowcast, TORNADO_LEGEND } from "../services/tornado-nowcast.js";
-import { errorPanel, legendHtml, playController, timesBlock } from "./shared-ui.js";
+import { loadTornadoNowcast } from "../services/tornado-nowcast.js";
+import { errorPanel, fillPanelBody, fillTimes, playController } from "./shared-ui.js";
 import { formatStamp } from "../services/jma-common.js";
 
-export async function renderTornadoNowcast(ctx) {
-  const data = await loadTornadoNowcast(ctx.prefecture);
+function prefetchAround(map, frames, index) {
+  if (!map?.prefetchTiles || !frames?.length) return;
+  const prev = frames[(index - 1 + frames.length) % frames.length];
+  const next = frames[(index + 1) % frames.length];
+  const after = frames[(index + 2) % frames.length];
+  [prev, next, after].forEach((frame) => {
+    if (frame?.tileUrl) map.prefetchTiles(frame.tileUrl);
+  });
+}
+
+function paintTornado(ctx, data) {
   ctx.els.screen.classList.add("is-map");
   ctx.els.stage.hidden = true;
+  fillTimes(ctx.els.panel, {
+    reportAt: data.dataUpdatedAt,
+    fetchedAt: data.fetchedAt,
+    fromCache: data.fromCache,
+    reportLabel: "データ時刻"
+  });
   if (!data.ok || !data.frames.length) {
-    ctx.els.panel.innerHTML = `
-      <div class="panel-kicker">竜巻発生確度ナウキャスト</div>
-      <div class="panel-area">${ctx.prefecture.name}</div>
-      ${errorPanel(data.message)}
-      ${timesBlock({ reportAt: null, fetchedAt: data.fetchedAt, fromCache: data.fromCache, reportLabel: "データ時刻" })}
-    `;
-    return data;
+    if (!ctx.els.panel.querySelector(".legend")) fillPanelBody(ctx.els.panel, errorPanel(data.message));
+    return;
   }
+  fillPanelBody(ctx.els.panel, "");
+  if (ctx._player) ctx._player.stop();
   const playMs = Number(ctx.contentSettings.playMs || 2000);
   const nowIndex = data.frames.findIndex((frame) => frame.validtime === frame.basetime);
-  const player = playController({
+  ctx._player = playController({
     frames: data.frames,
     playMs,
     holdMs: 3200,
@@ -25,19 +37,33 @@ export async function renderTornadoNowcast(ctx) {
     onFrame(frame, index, total) {
       ctx.map.setTileOverlay(frame.tileUrl);
       ctx.els.point.textContent = `${formatStamp(frame.date)}　${index + 1}/${total}`;
+    },
+    onPrefetch(next, after, current) {
+      const index = data.frames.indexOf(current);
+      prefetchAround(ctx.map, data.frames, index >= 0 ? index : 0);
+      if (next?.tileUrl) ctx.map.prefetchTiles(next.tileUrl);
+      if (after?.tileUrl) ctx.map.prefetchTiles(after.tileUrl);
     }
   });
-  ctx.addCleanup(() => {
-    player.stop();
-    ctx.map.clearTileOverlay();
+  if (!ctx._playerBound) {
+    ctx._playerBound = true;
+    ctx.addCleanup(() => {
+      ctx._player?.stop();
+      ctx.map.clearTileOverlay();
+    });
+  }
+}
+
+export async function renderTornadoNowcast(ctx) {
+  const data = await loadTornadoNowcast(ctx.prefecture, {
+    onCached: (cached) => paintTornado(ctx, cached)
   });
-  ctx.els.panel.innerHTML = `
-    <div class="panel-kicker">竜巻発生確度</div>
-    <div class="panel-area">${ctx.prefecture.name}</div>
-    <p class="wx-hint">気象庁の竜巻発生確度ナウキャストです。この地域に該当がなければ地図は無色のままです。</p>
-    <div class="legend">${legendHtml(TORNADO_LEGEND)}</div>
-    <p class="wx-hint">${TORNADO_LEGEND.map((step) => `${step.label}：${step.meaning}`).join("　")}</p>
-    ${timesBlock({ reportAt: data.dataUpdatedAt, fetchedAt: data.fetchedAt, fromCache: data.fromCache, reportLabel: "データ時刻" })}
-  `;
+  if (data.ok && data.frames.length) {
+    paintTornado(ctx, data);
+    return data;
+  }
+  if (ctx._player) return data;
+  fillPanelBody(ctx.els.panel, errorPanel(data.message));
+  fillTimes(ctx.els.panel, { reportAt: null, fetchedAt: data.fetchedAt, fromCache: data.fromCache, reportLabel: "データ時刻" });
   return data;
 }

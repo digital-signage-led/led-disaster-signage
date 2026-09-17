@@ -1,4 +1,4 @@
-import { cacheKey, loadLastGood, saveLastGood } from "./cache.js";
+import { cacheKey, loadLastGood, peekLastGood, saveLastGood } from "./cache.js";
 import { loadArea } from "./area.js";
 import { XML_REGULAR_FEED, fetchJson, fetchTextFlexible, parseJst } from "./jma-common.js";
 
@@ -122,8 +122,9 @@ function uniquePeriods(rows) {
   return seen;
 }
 
-export async function loadEarlyWarning(prefecture) {
+export async function loadEarlyWarning(prefecture, hooks = {}) {
   const key = cacheKey(prefecture.slug, "early_warning");
+  peekLastGood(key, hooks.onCached);
   try {
     const [feedXml, area] = await Promise.all([
       fetchTextFlexible(XML_REGULAR_FEED),

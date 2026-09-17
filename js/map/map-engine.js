@@ -211,14 +211,18 @@ function strokeStyle(feature, currentId) {
 
 function waitSize(el) {
   return new Promise((resolve) => {
+    if (el.clientWidth >= 80 && el.clientHeight >= 80) {
+      resolve();
+      return;
+    }
     let n = 0;
     const tick = () => {
       n += 1;
-      if ((el.clientWidth >= 80 && el.clientHeight >= 80) || n > 40) {
+      if ((el.clientWidth >= 80 && el.clientHeight >= 80) || n > 8) {
         resolve();
         return;
       }
-      setTimeout(tick, 50);
+      setTimeout(tick, 40);
     };
     tick();
   });
@@ -274,13 +278,29 @@ function isPrefecture(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && (value.slug || value.centerLatitude));
 }
 
+export function warmupMap() {
+  loadLeaflet().catch(() => {});
+  loadPrefGeo().catch(() => {});
+  loadNeighborGeo().catch(() => {});
+}
+
+warmupMap();
+
 export async function createMap(container, { prefecture, interactive = false, mode = "prefecture", zoom, center, maxFitZoom } = {}) {
+  if (container._mapApi) {
+    const api = container._mapApi;
+    if (mode === "national") api.setView(center || [36.5, 136.2], zoom ?? 5);
+    else if (prefecture) api.setView(prefecture);
+    return api;
+  }
   const L = await loadLeaflet();
-  const [prefGeo, neighborGeo] = await Promise.all([
+  const geoReady = Promise.all([
     loadPrefGeo().catch(() => null),
     loadNeighborGeo().catch(() => null)
   ]);
   await waitSize(container);
+  const [prefGeo, neighborGeo] = await geoReady;
+  if (container._mapApi) return container._mapApi;
   if (container._leaflet_id) {
     try {
       container._leaflet?.remove?.();
@@ -376,13 +396,86 @@ export async function createMap(container, { prefecture, interactive = false, mo
   paintNeighbors();
   container._leaflet = map;
 
-  let tileOverlay = null;
   let overlayUrl = "";
+  let overlaySeq = 0;
+  const tileLayers = [null, null];
+  let shownTile = 0;
+  const decodedTiles = new Map();
   const extraLayers = [];
+
+  const makeTileLayer = (urlTemplate) => {
+    const layer = L.tileLayer(urlTemplate, {
+      pane: "nowcastPane",
+      opacity: 0,
+      maxZoom: 12,
+      maxNativeZoom: 6,
+      minZoom: 3.5,
+      minNativeZoom: 5,
+      zoomOffset: 0,
+      tileSize: 256,
+      detectRetina: false,
+      updateWhenIdle: false,
+      updateWhenZooming: false,
+      keepBuffer: 8,
+      className: "disaster-overlay",
+      errorTileUrl: TRANSPARENT
+    });
+    const origUrl = layer.getTileUrl.bind(layer);
+    layer.getTileUrl = (coords) => origUrl({
+      ...coords,
+      z: Math.max(5, Math.min(6, Math.round(Number(coords.z) || 6)))
+    });
+    return layer;
+  };
+
+  const pruneDecoded = () => {
+    if (decodedTiles.size <= 64) return;
+    [...decodedTiles.entries()]
+      .sort((a, b) => a[1].at - b[1].at)
+      .slice(0, decodedTiles.size - 64)
+      .forEach(([key]) => decodedTiles.delete(key));
+  };
+
+  const decodeTile = (url) => {
+    const hit = decodedTiles.get(url);
+    if (hit) {
+      hit.at = Date.now();
+      return hit.ready;
+    }
+    const img = new Image();
+    img.decoding = "async";
+    img.src = url;
+    const ready = (img.decode ? img.decode() : new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = resolve;
+    })).catch(() => {});
+    decodedTiles.set(url, { img, ready, at: Date.now() });
+    pruneDecoded();
+    return ready;
+  };
+
+  const tilesForTemplate = (urlTemplate) => {
+    const z = Math.max(5, Math.min(6, Math.round(map.getZoom() || 6)));
+    const bounds = map.getBounds();
+    const nw = map.project(bounds.getNorthWest(), z).divideBy(256).floor();
+    const se = map.project(bounds.getSouthEast(), z).divideBy(256).ceil();
+    const urls = [];
+    for (let x = nw.x; x <= se.x; x += 1) {
+      for (let y = nw.y; y <= se.y; y += 1) {
+        urls.push(L.Util.template(urlTemplate, { s: "a", z, x, y }));
+      }
+    }
+    return urls;
+  };
+
+  const prefetchTiles = (urlTemplate) => {
+    if (!urlTemplate) return Promise.resolve();
+    return Promise.all(tilesForTemplate(urlTemplate).map(decodeTile));
+  };
 
   const refresh = () => {
     map.invalidateSize(false);
-    if (tileOverlay) tileOverlay.redraw();
+    tileLayers.forEach((layer) => layer?.redraw());
   };
 
   const api = {
@@ -418,50 +511,32 @@ export async function createMap(container, { prefecture, interactive = false, mo
     setTileOverlay(urlTemplate) {
       if (!urlTemplate) return;
       overlayOn = true;
-      if (urlTemplate === overlayUrl && tileOverlay) {
-        tileOverlay.redraw();
-        return;
-      }
-      overlayUrl = urlTemplate;
-      if (tileOverlay) {
-        tileOverlay.setUrl(urlTemplate);
-        map.invalidateSize(false);
-        tileOverlay.redraw();
-        return;
-      }
-      overlayOn = true;
       paintPrefs();
-      tileOverlay = L.tileLayer(urlTemplate, {
-        pane: "nowcastPane",
-        opacity: 0.5,
-        maxZoom: 12,
-        maxNativeZoom: 6,
-        minZoom: 3.5,
-        minNativeZoom: 5,
-        zoomOffset: 0,
-        tileSize: 256,
-        detectRetina: false,
-        updateWhenIdle: false,
-        updateWhenZooming: false,
-        keepBuffer: 8,
-        className: "disaster-overlay",
-        errorTileUrl: TRANSPARENT
+      if (urlTemplate === overlayUrl && tileLayers[shownTile]) return;
+      const seq = ++overlaySeq;
+      const next = 1 - shownTile;
+      if (!tileLayers[next]) tileLayers[next] = makeTileLayer(urlTemplate);
+      else tileLayers[next].setUrl(urlTemplate);
+      tileLayers[next].setOpacity(0);
+      if (!map.hasLayer(tileLayers[next])) tileLayers[next].addTo(map);
+      prefetchTiles(urlTemplate).then(() => {
+        if (seq !== overlaySeq) return;
+        tileLayers[next].setOpacity(0.5);
+        if (tileLayers[shownTile] && tileLayers[shownTile] !== tileLayers[next]) {
+          tileLayers[shownTile].setOpacity(0);
+        }
+        shownTile = next;
+        overlayUrl = urlTemplate;
       });
-      const origUrl = tileOverlay.getTileUrl.bind(tileOverlay);
-      tileOverlay.getTileUrl = (coords) => origUrl({
-        ...coords,
-        z: Math.max(5, Math.min(6, Math.round(Number(coords.z) || 6)))
-      });
-      tileOverlay.addTo(map);
-      map.invalidateSize(false);
-      tileOverlay.redraw();
     },
+    prefetchTiles,
     clearTileOverlay() {
-      if (tileOverlay) {
-        map.removeLayer(tileOverlay);
-        tileOverlay = null;
-        overlayUrl = "";
-      }
+      tileLayers.forEach((layer, index) => {
+        if (!layer) return;
+        try { map.removeLayer(layer); } catch { /* ignore */ }
+        tileLayers[index] = null;
+      });
+      overlayUrl = "";
       overlayOn = false;
       paintPrefs();
     },
@@ -488,6 +563,7 @@ export async function createMap(container, { prefecture, interactive = false, mo
   requestAnimationFrame(refresh);
   setTimeout(refresh, 120);
   setTimeout(refresh, 400);
+  container._mapApi = api;
   return api;
 }
 

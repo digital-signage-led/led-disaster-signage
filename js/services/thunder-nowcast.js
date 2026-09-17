@@ -1,4 +1,4 @@
-import { cacheKey, loadLastGood, saveLastGood } from "./cache.js";
+import { cacheKey, loadLastGood, peekLastGood, saveLastGood } from "./cache.js";
 import { NOWC_N3_URL, fetchJson, nowcTileUrl, nowcToDate } from "./jma-common.js";
 
 function hasElement(entry, name) {
@@ -13,8 +13,9 @@ export const THUNDER_LEGEND = [
   { color: "#d61f1f", label: "活動度4", meaning: "非常に発達した雷雲" }
 ];
 
-export async function loadThunderNowcast(prefecture) {
+export async function loadThunderNowcast(prefecture, hooks = {}) {
   const key = cacheKey(prefecture.slug, "lightning_nowcast");
+  peekLastGood(key, hooks.onCached);
   try {
     const times = await fetchJson(`${NOWC_N3_URL}?_=${Date.now()}`);
     const frames = (Array.isArray(times) ? times : [])

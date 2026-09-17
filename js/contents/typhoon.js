@@ -418,11 +418,12 @@ function paintFrame(ctx, data, frame) {
   `;
 }
 
-export async function renderTyphoon(ctx) {
-  const data = await loadTyphoons();
+function paintTyphoon(ctx, data) {
   ctx.els.screen.classList.add("is-map", "is-typhoon-map");
   if (ctx.els.attr) ctx.els.attr.textContent = "出典：気象庁";
+  if (ctx.els.stage) ctx.els.stage.hidden = true;
   if (!data.ok && !data.storms?.length) {
+    if (ctx.els.panel.querySelector(".ty-facts")) return;
     ctx.els.panel.innerHTML = `
       <div class="panel-kicker">台風情報</div>
       <div class="panel-area">全国</div>
@@ -430,10 +431,9 @@ export async function renderTyphoon(ctx) {
       ${timesBlock({ reportAt: null, fetchedAt: data.fetchedAt, fromCache: false, reportLabel: "発表時刻" })}
     `;
     fitJapan(ctx.map);
-    return data;
+    return;
   }
   if (data.empty) {
-    if (ctx.els.stage) ctx.els.stage.hidden = true;
     fitJapan(ctx.map);
     ctx.els.panel.innerHTML = `
       <div class="panel-kicker">台風情報</div>
@@ -441,9 +441,8 @@ export async function renderTyphoon(ctx) {
       ${emptyPanel("現在台風情報はありません")}
       ${timesBlock({ reportAt: data.reportAt, fetchedAt: data.fetchedAt, fromCache: data.fromCache, reportLabel: "発表時刻" })}
     `;
-    return data;
+    return;
   }
-  if (ctx.els.stage) ctx.els.stage.hidden = true;
   ctx.els.panel.classList.add("is-typhoon");
   const frames = framesOf(data.storms);
   if (frames.length) fitAllStorms(ctx.map, data.storms);
@@ -454,9 +453,11 @@ export async function renderTyphoon(ctx) {
       ${emptyPanel("進路情報がありません")}
       ${timesBlock({ reportAt: data.storms[0].issueAt, fetchedAt: data.fetchedAt, fromCache: data.fromCache, reportLabel: "発表時刻" })}
     `;
-    return data;
+    return;
   }
-  const player = playController({
+  if (ctx._player) ctx._player.stop();
+  if (ctx._refitTimer) window.clearTimeout(ctx._refitTimer);
+  ctx._player = playController({
     frames,
     playMs: 3000,
     holdMs: 3000,
@@ -466,11 +467,21 @@ export async function renderTyphoon(ctx) {
   });
   const refit = () => fitAllStorms(ctx.map, data.storms);
   window.requestAnimationFrame(refit);
-  const later = window.setTimeout(refit, 240);
-  ctx.addCleanup(() => {
-    player.stop();
-    window.clearTimeout(later);
-    ctx.map.clearExtraLayers();
+  ctx._refitTimer = window.setTimeout(refit, 240);
+  if (!ctx._playerBound) {
+    ctx._playerBound = true;
+    ctx.addCleanup(() => {
+      ctx._player?.stop();
+      window.clearTimeout(ctx._refitTimer);
+      ctx.map.clearExtraLayers();
+    });
+  }
+}
+
+export async function renderTyphoon(ctx) {
+  const data = await loadTyphoons({
+    onCached: (cached) => paintTyphoon(ctx, cached)
   });
+  paintTyphoon(ctx, data);
   return data;
 }

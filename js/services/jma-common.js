@@ -47,16 +47,24 @@ export function parseNowcMs(stamp) {
   return date ? date.getTime() : null;
 }
 
+const inflight = new Map();
+
 export async function fetchText(url, timeoutMs = 12000) {
+  const key = `text:${url}`;
+  if (inflight.has(key)) return inflight.get(key);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
-    return await res.text();
-  } finally {
-    clearTimeout(timer);
-  }
+  const pending = (async () => {
+    try {
+      const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+      return await res.text();
+    } finally {
+      clearTimeout(timer);
+    }
+  })().finally(() => inflight.delete(key));
+  inflight.set(key, pending);
+  return pending;
 }
 
 export async function fetchJson(url, timeoutMs = 12000) {

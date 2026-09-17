@@ -1,5 +1,5 @@
 import { loadWarnings } from "../services/warnings.js";
-import { emptyPanel, errorPanel, timesBlock } from "./shared-ui.js";
+import { emptyPanel, errorPanel, fillPanelBody, fillTimes } from "./shared-ui.js";
 
 const MAP_FILL = {
   special: { fillColor: "#111111", fillOpacity: 0.92 },
@@ -20,7 +20,10 @@ function paintWarningMap(ctx, items) {
   } else {
     ctx.map.clearPrefColors?.();
   }
-  ctx.addCleanup(() => ctx.map.clearPrefColors?.());
+  if (!ctx._colorBound) {
+    ctx._colorBound = true;
+    ctx.addCleanup(() => ctx.map.clearPrefColors?.());
+  }
 }
 
 function groupItems(items) {
@@ -55,40 +58,40 @@ function section(title, items, className) {
   `;
 }
 
-export async function renderWarnings(ctx) {
-  const data = await loadWarnings(ctx.prefecture);
+function paintWarnings(ctx, data) {
   const groups = groupItems(data.items || []);
   paintWarningMap(ctx, data.items || []);
   if (ctx.els.stage) ctx.els.stage.hidden = true;
-  if (!data.ok && !data.items?.length) {
-    ctx.els.panel.innerHTML = `
-      <div class="panel-kicker">気象警報・注意報</div>
-      <div class="panel-area">${ctx.prefecture.name}</div>
-      ${errorPanel(data.message)}
-      ${timesBlock({ reportAt: null, fetchedAt: data.fetchedAt, fromCache: false, reportLabel: "発表時刻" })}
-    `;
-    return data;
-  }
+  const hint = ctx.els.panel.querySelector(".wx-hint");
+  if (hint) hint.textContent = data.headlineText || ctx.content.description;
   const board = data.empty
     ? emptyPanel(`現在、この地域に発表中の気象警報・注意報はありません`)
     : `
+      <div class="count-row">
+        <div><em>特別警報</em><strong>${groups.special.length}</strong></div>
+        <div><em>警報</em><strong>${groups.warning.length}</strong></div>
+        <div><em>注意報</em><strong>${groups.advisory.length}</strong></div>
+      </div>
       <div class="warn-board">
         ${section("特別警報", groups.special, "special")}
         ${section("警報", groups.warning, "warning")}
         ${section("注意報", groups.advisory, "advisory")}
       </div>
     `;
-  ctx.els.panel.innerHTML = `
-    <div class="panel-kicker">気象警報・注意報</div>
-    <div class="panel-area">${ctx.prefecture.name}</div>
-    <p class="wx-hint">${data.headlineText || ctx.content.description}</p>
-    <div class="count-row">
-      <div><em>特別警報</em><strong>${groups.special.length}</strong></div>
-      <div><em>警報</em><strong>${groups.warning.length}</strong></div>
-      <div><em>注意報</em><strong>${groups.advisory.length}</strong></div>
-    </div>
-    ${board}
-    ${timesBlock({ reportAt: data.reportAt, fetchedAt: data.fetchedAt, fromCache: data.fromCache, reportLabel: "発表時刻" })}
-  `;
+  fillPanelBody(ctx.els.panel, board);
+  fillTimes(ctx.els.panel, { reportAt: data.reportAt, fetchedAt: data.fetchedAt, fromCache: data.fromCache, reportLabel: "発表時刻" });
+}
+
+export async function renderWarnings(ctx) {
+  const data = await loadWarnings(ctx.prefecture, {
+    onCached: (cached) => paintWarnings(ctx, cached)
+  });
+  if (data.ok || data.items?.length) {
+    paintWarnings(ctx, data);
+    return data;
+  }
+  if (ctx.els.panel.querySelector(".warn-board, .count-row")) return data;
+  fillPanelBody(ctx.els.panel, errorPanel(data.message));
+  fillTimes(ctx.els.panel, { reportAt: null, fetchedAt: data.fetchedAt, fromCache: false, reportLabel: "発表時刻" });
   return data;
 }

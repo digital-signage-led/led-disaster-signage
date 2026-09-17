@@ -22,7 +22,7 @@ const state = {
   store: loadDraft(),
   prefecture: initialContent.locationScope === "national"
     ? NATIONAL.slug
-    : getPrefecture(query.get("prefecture") || "toyama").slug,
+    : getPrefecture(query.get("prefecture") || "tokyo").slug,
   content: initialContent.id,
   previewFrame: null
 };
@@ -170,9 +170,23 @@ function pushPreviewTokens() {
   }, location.origin);
 }
 
+function previewIdentity() {
+  return `${state.prefecture}|${state.content}`;
+}
+
+let lastPreviewId = "";
+
 function renderPreview() {
   writePreviewSettings();
-  previewFrame().src = previewSrc();
+  const iframe = previewFrame();
+  const id = previewIdentity();
+  if (iframe.getAttribute("src") && lastPreviewId === id) {
+    pushPreviewTokens();
+    syncCurrentUrl();
+    return;
+  }
+  lastPreviewId = id;
+  iframe.src = previewSrc();
   syncCurrentUrl();
 }
 
@@ -201,17 +215,24 @@ function renderUrls() {
     return true;
   });
   $("url-count").textContent = `${rows.length} / ${publicComboCount()}`;
-  $("url-table").innerHTML = rows.map((row) => {
+  const table = $("url-table");
+  const frag = document.createDocumentFragment();
+  for (const row of rows) {
     const url = publicHref(row.prefecture.slug, row.content.id);
-    const current = row.prefecture.slug === state.prefecture && row.content.id === state.content ? " is-current" : "";
-    return `<tr class="${current}" data-open-pref="${row.prefecture.slug}" data-open-content="${row.content.id}">
+    const tr = document.createElement("tr");
+    if (row.prefecture.slug === state.prefecture && row.content.id === state.content) tr.className = "is-current";
+    tr.dataset.openPref = row.prefecture.slug;
+    tr.dataset.openContent = row.content.id;
+    tr.innerHTML = `
       <td>${row.prefecture.name}</td>
       <td>${row.content.name}</td>
       <td><span class="pill" data-status="${row.status}">${row.status === "published" ? "公開済み" : "下書き"}</span></td>
       <td class="url-cell"><code>${url}</code></td>
       <td><button type="button" data-copy="${url}">URLをコピー</button></td>
-    </tr>`;
-  }).join("");
+    `;
+    frag.appendChild(tr);
+  }
+  table.replaceChildren(frag);
 }
 
 function toast(message) {
@@ -353,6 +374,10 @@ function bind() {
     renderUrls();
     renderPreview();
   });
+}
+
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register(new URL("../sw.js", import.meta.url), { scope: "./" }).catch(() => {});
 }
 
 bind();

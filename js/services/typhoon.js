@@ -1,4 +1,4 @@
-import { cacheKey, loadLastGood, saveLastGood } from "./cache.js";
+import { cacheKey, loadLastGood, peekLastGood, saveLastGood } from "./cache.js";
 import { TYPHOON_FCST_URL, TYPHOON_LIST_URL, TYPHOON_SPEC_URL, fetchJson, parseJst } from "./jma-common.js";
 
 function partName(part) {
@@ -121,8 +121,9 @@ export function displayName(storm) {
   return storm.category || "熱帯低気圧";
 }
 
-export async function loadTyphoons() {
+export async function loadTyphoons(hooks = {}) {
   const key = cacheKey("national", "typhoon");
+  peekLastGood(key, hooks.onCached);
   try {
     const list = await fetchJson(TYPHOON_LIST_URL);
     const targets = Array.isArray(list) ? list : (list?.tropicalCyclone ? [list] : []);
